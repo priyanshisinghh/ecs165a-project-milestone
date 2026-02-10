@@ -53,7 +53,7 @@ class Index:
             
         wantedKeys = list(index.irange(begin, end))
         for i in wantedKeys:
-            RIDs.append(index.get(i))
+            RIDs.append(index.get(i)[0])
 
         return RIDs
 
