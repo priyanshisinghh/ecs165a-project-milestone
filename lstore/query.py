@@ -19,28 +19,55 @@ class Query:
     reads the latest version of a certain RID
     """
     def latest_record(self, search_RID, column_indexs):
-        base, base_location = self.table.page_directory[search_RID] 
-
-        indirection = self.table.base_page.collumns[INDIRECTION_COLUMN].read(base_location)
-
-        values = [] * self.table.num_columns
-        if not indirection:
+        base, base_location = self.table.page_directory[search_RID]
+        #print("BASE: ", base_location, base)
+        indirection = self.table.base_page.columns[INDIRECTION_COLUMN].read(base_location)
+        #print("Indirection", indirection)
+        values = [None]*self.table.num_columns
+        if indirection == -1:
             for i in range(self.table.num_columns):
                 if not column_indexs[i]:
                     continue
-                values[i] = self.table.base_page.columns[METADATA_COLUMNS].read(base_location)
+                    
+                values[i] = self.table.base_page.columns[METADATA_COLUMNS + i].read(base_location)
+                # print("Latest record: ", values[i])
         else:
-            tail, tail_location = self.page_directory[indirection]
+
+            tail, tail_location = self.table.page_directory[indirection]
+            # made schema_encoding an int 
             schema_encoding = self.table.tail_page.columns[SCHEMA_ENCODING_COLUMN].read(tail_location)
-            
-            for i in range(self.table.num_column):
+            reverse = self.table.num_columns
+            for i in range(self.table.num_columns):
                 if not column_indexs[i]:
                     continue
             
-                if schema_encoding[i]:
+                if ((schema_encoding >> reverse -i - 1) & 1) == 1:
                     values[i] = self.table.tail_page.columns[METADATA_COLUMNS + i].read(tail_location)
+                    # print("Latestrecord: ", i, values[i], search_RID)
                 else:
-                    values[i] = self.table.base_page.columns[METADATA_COLUMNS + 1].read(base_location)
+                    # travesing the records until it reaches the most recently updated
+                    while True:
+                        next_indirection = self.table.tail_page.columns[INDIRECTION_COLUMN].read(tail_location)
+                        
+                        # we've reached the base
+                        if next_indirection == -1:
+                            values[i] = self.table.base_page.columns[METADATA_COLUMNS + i].read(base_location)
+                            break
+                        next_tail, next_tail_location = self.table.page_directory[next_indirection]
+                        if next_tail == True:
+                            values[i] = self.table.base_page.columns[METADATA_COLUMNS + i].read(base_location)
+                            break
+                        new_schema_encoding = self.table.tail_page.columns[SCHEMA_ENCODING_COLUMN].read(next_tail_location)
+                        print("new_schema_encoding", new_schema_encoding)
+                        if ((new_schema_encoding >> reverse -i - 1) & 1) == 1:
+                            values[i] = self.table.tail_page.columns[METADATA_COLUMNS + i].read(next_tail_location)
+                            print("REACHED Here")
+                            break
+                            
+
+
+                    # print("Latest record2: ", i, values[i], search_RID)
+                
         
         return Record(search_RID, values[self.table.key], values)
 
@@ -51,9 +78,14 @@ class Query:
     # Returns True upon succesful deletion
     # Return False if record doesn't exist or is locked due to 2PL
     """
+    # done - ish
     def delete(self, primary_key):
-        pass
-    
+        rIDs = self.table.index.locate(self.table.key,primary_key)
+        if not rIDs:
+            return False
+        
+        self.table.index.remove_entry(self.table.key,primary_key)
+        return True 
     
     """
     # Insert a record with specified columns
@@ -77,8 +109,14 @@ class Query:
     def select(self, search_key, search_key_index, projected_columns_index):
         rIDs = self.table.index.locate(search_key_index, search_key)
         records = []
+        # does primitive megre to
+
         for rID in rIDs:
-            records.append(self.latest_record(rID, projected_columns_index))
+            base, entry = self.table.page_directory[rID]
+            if base== True:
+                record = self.latest_record(rID, projected_columns_index)
+                records.append(record)
+                continue
         return records
 
     
@@ -117,15 +155,16 @@ class Query:
     def sum(self, start_range, end_range, aggregate_column_index):
         rIDs = self.table.index.locate_range(aggregate_column_index, start_range, end_range)
 
-        if not rIDs:
+        if rIDs == 0:
             return False
-        
+        #print(len(rIDs))
         total = 0
         # for it work with the other function
         search_columns = [0]*self.table.num_columns
         search_columns[aggregate_column_index] = 1
 
         for rID in rIDs:
+            #print("SUMMING", rID)
             record = self.latest_record(rID, search_columns)
             total += record.columns[aggregate_column_index]
         

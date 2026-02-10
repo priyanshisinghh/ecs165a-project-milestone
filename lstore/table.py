@@ -51,14 +51,15 @@ class Table:
 
         # insert to base page
         # indirection , RID, timestap, Schema
-        metadata = [0, rID, time(), 0] 
+        metadata = [-1, rID, int(time()), 0] 
 
         entry = self.base_page.update(*(metadata + data))
         self.page_directory[rID] = (True, entry)
 
         # updating the index
         for i, cur_data in enumerate(data):
-            self.index.insert_entry(i,cur_data, rID)
+            #self.index.remove_entry(i, rID) # remove old
+            self.index.insert_entry(i, cur_data, rID) # input new
 
         return True
     
@@ -67,7 +68,6 @@ class Table:
     to update a certain key's columns
     """
     def update(self, primary_key, data):
-
         rIDs = self.index.locate(self.key, primary_key)
         # if no matching keys were found
         if not rIDs:
@@ -82,22 +82,43 @@ class Table:
 
         new_rID = self.rid_num 
         self.rid_num += 1
-        new_tail = []
 
-        schema_encoding = '0' * (self.table.num_columns + METADATA_COLUMNS)
+        schema_encoding = 0
+        reverse = self.num_columns
+
+        
+        # cumulative
+        old_data = []
+        if prev_tail == -1: # if previous is the base
+            for val in range(self.num_columns):
+                old_data.append(self.base_page.columns[METADATA_COLUMNS+ val].read(base_location))
+        else:
+            temp_prev, temp_prev_location = self.page_directory[prev_tail]
+            for val in range(self.num_columns):
+                old_data.append(self.tail_page.columns[METADATA_COLUMNS+ val].read(temp_prev_location))
+
+        #print("1 TABLE CULM", old_data, primary_key)
+        #print("2",data, prev_tail)
+        # the 1's represent most updated
+        # non - culaltive
         for i, val in enumerate(data):
-            if val is not None:
-                schema_encoding[i] = '1'
+            if val is None:
+                data[i] = old_data[i]
+                schema_encoding |= ( 1 << (reverse - i-1))
+            else:
+                schema_encoding |= ( 1 << (reverse - i-1))
+        #print("3",data)
+            
+            
 
-        metadata = [prev_tail,new_rID, time(), schema_encoding]
-
+        metadata = [prev_tail, new_rID, int(time()), schema_encoding]
+        #print("UPDATE ", schema_encoding, new_rID)
         entry = self.tail_page.append(*(metadata + data))
         self.page_directory[new_rID] = (False, entry)
 
         # change the old indirection column in the base_page
         self.base_page.columns[INDIRECTION_COLUMN].replace(base_location, new_rID)
-
-        # change the old schema if neccesary
+        # change the old schema, any 1's are considered updated by the some tail pointer
 
 
     def __merge(self):
