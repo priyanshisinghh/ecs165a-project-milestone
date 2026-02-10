@@ -81,7 +81,7 @@ class Query:
         #lookup RIDs using index
         rIDs = self.table.index.locate(search_key_index, search_key)
         if not rIDs:
-            return False
+            return []
 
         #this can be used for non primary keys, but that won't be necessary for milestone 1
         records = []
