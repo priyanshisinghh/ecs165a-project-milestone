@@ -119,7 +119,7 @@ class Table:
         # change the old indirection column in the base_page
         self.base_page.columns[INDIRECTION_COLUMN].replace(base_location, new_rID)
         # change the old schema, any 1's are considered updated by the some tail pointer
-
+        return True
 
     def __merge(self):
         print("merge is happening")
