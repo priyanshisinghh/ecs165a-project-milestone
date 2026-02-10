@@ -95,11 +95,11 @@ class Index:
         if self.indices[column] is None:
             return False
 
+        index = self.indices[column]
+        
         if column == self.table.key:
             if index.get(key) is not None:
                 return False
-
-        index = self.indices[column]
         
         """
         if there is already a key with the same value, we want to add the RID
