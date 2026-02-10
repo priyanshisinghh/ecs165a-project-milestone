@@ -25,13 +25,13 @@ class Index:
             raise ValueError("Column Out Of Bounds")
 
         if self.indices[column] is None:
-            return False
+            return []
 
         index = self.indices[column]
         if value in index.keys():
-            return index.get(value)
+            return index.get(value, [])
             
-        return False
+        return []
 
     """
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
@@ -42,7 +42,7 @@ class Index:
             raise ValueError("Column Out Of Bounds")
 
         if self.indices[column] is None:
-            return False
+            return []
 
         index = self.indices[column]
         keys = list(index.keys())
@@ -50,7 +50,7 @@ class Index:
 
         #check if the requested range is even in the index
         if end < keys[0] or begin > keys[-1]:
-            return False
+            return []
             
         wantedKeys = list(index.irange(begin, end))
         for i in wantedKeys:
