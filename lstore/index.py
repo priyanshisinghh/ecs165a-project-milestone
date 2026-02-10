@@ -123,7 +123,7 @@ class Index:
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
 
-        if self.indices[column] is None or column == self.table.key:
+        if self.indices[column] is None:
             return False
 
         index = self.indices[column]
@@ -131,5 +131,6 @@ class Index:
             return False
 
         index.pop(key)
+        return True
 
     
