@@ -109,7 +109,7 @@ class Query:
         #locate RIDs for search key
         rIDs = self.table.index.locate(search_key_index, search_key)
         if not rIDs:
-            return False
+            return []  # Changed from False to [] for consistency
 
         records = []
 
@@ -221,7 +221,8 @@ class Query:
 
         for rID in rIDs:
             record = self.latest_record(rID, search_columns)
-            total += record.columns[aggregate_column_index]
+            if record is not False:  # Added check to handle potential False return
+                total += record.columns[aggregate_column_index]
 
         return total
 
@@ -248,10 +249,13 @@ class Query:
             if base != True:
                 continue
 
-            # convert RID to primary key value so that  select_version gets the right searchkey)
+            # convert RID to primary key value so that select_version gets the right searchkey
             pk_val = self.table.base_page.columns[METADATA_COLUMNS + self.table.key].read(base_location)
-            record = self.select_version(pk_val, self.table.key, search_columns, relative_version)[0]
-            total += record.columns[aggregate_column_index]
+            records = self.select_version(pk_val, self.table.key, search_columns, relative_version)
+            
+            # Fixed: Check if records list is not empty before accessing
+            if records and len(records) > 0:
+                total += records[0].columns[aggregate_column_index]
 
         return total
 
@@ -264,10 +268,12 @@ class Query:
     # Returns False if no record matches key or if target record is locked by 2PL.
     """
     def increment(self, key, column):
-        r = self.select(key, self.table.key, [1] * self.table.num_columns)[0]
-        if r is not False:
+        records = self.select(key, self.table.key, [1] * self.table.num_columns)
+        # Fixed: Check if records list is not empty
+        if records and len(records) > 0:
+            r = records[0]
             updated_columns = [None] * self.table.num_columns
-            updated_columns[column] = r[column] + 1
+            updated_columns[column] = r.columns[column] + 1
             u = self.update(key, *updated_columns)
             return u
         return False

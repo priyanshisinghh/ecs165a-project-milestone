@@ -49,12 +49,12 @@ class Index:
         RIDs = []
 
         #check if the requested range is even in the index
-        if end < keys[0] or begin > keys[-1]:
+        if len(keys) == 0 or end < keys[0] or begin > keys[-1]:
             return []
             
         wantedKeys = list(index.irange(begin, end))
         for i in wantedKeys:
-            RIDs.append(index.get(i)[0])
+            RIDs.extend(index.get(i, []))  # Changed to extend and get all RIDs
 
         return RIDs
 
@@ -97,10 +97,6 @@ class Index:
 
         index = self.indices[column]
         
-        if column == self.table.key:
-            if index.get(key) is not None:
-                return False
-        
         """
         if there is already a key with the same value, we want to add the RID
         to the already existing key. therefore, all of our dictionary values
@@ -109,15 +105,18 @@ class Index:
         there is a special case for the primary key column, because there cannot be multiple RIDs per key.
         """
         
+        # Fixed: changed table.key to self.table.key
         if column == self.table.key:
             if index.get(key) is not None:
                 return False #cannot interfere w already existing primary key
             
         if index.get(key) is not None:
             index[key].append(RID)
-
         else:
             index[key] = [RID]
+        
+        # Added missing return statement
+        return True
 
     def remove_entry(self, column, key):
         if column >= self.columns or column < 0:
@@ -132,5 +131,3 @@ class Index:
 
         index.pop(key)
         return True
-
-    
