@@ -24,21 +24,21 @@ class Page:
     # everything is in bits so read will have to turn it back
     def write(self, value):
         if value is None:
-            self.data[self.ptr: self.ptr + VALUE_SIZE] = (0).to_bytes(VALUE_SIZE, byteorder='big',signed='True')
+            self.data[self.ptr: self.ptr + VALUE_SIZE] = (0).to_bytes(VALUE_SIZE, byteorder='big',signed=True)
             self.ptr += VALUE_SIZE
             self.num_records += 1
             return
-        self.data[self.ptr:self.ptr + VALUE_SIZE] = (value).to_bytes(VALUE_SIZE, byteorder="big",signed='True')
+        self.data[self.ptr:self.ptr + VALUE_SIZE] = (value).to_bytes(VALUE_SIZE, byteorder="big",signed=True)
         self.num_records += 1
         self.ptr += VALUE_SIZE
     
     def overwrite(self, offset, value):
         start = int(offset*VALUE_SIZE)
-        self.data[start : start + VALUE_SIZE] = (value).to_bytes(VALUE_SIZE, byteorder="big", signed='True')
+        self.data[start : start + VALUE_SIZE] = (value).to_bytes(VALUE_SIZE, byteorder="big", signed=True)
 
     def read(self, offset):
         start = int(offset*VALUE_SIZE)
-        return int.from_bytes(self.data[start : start + VALUE_SIZE], byteorder='big', signed='True')
+        return int.from_bytes(self.data[start : start + VALUE_SIZE], byteorder='big', signed=True)
 
 # to avoid duplicate work for Base Page and Tail page logic
 class Page_Column:
