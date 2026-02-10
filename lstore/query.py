@@ -27,7 +27,7 @@ class Query:
         values = [None]*self.table.num_columns
 
         #if it has no updates, read base record
-        if indirection == -1:
+        if indirection in (0, -1):
             for i in range(self.table.num_columns):
                 if not column_indexs[i]:
                     continue
