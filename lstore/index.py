@@ -109,7 +109,7 @@ class Index:
         there is a special case for the primary key column, because there cannot be multiple RIDs per key.
         """
         
-        if column == table.key:
+        if column == self.table.key:
             if index.get(key) is not None:
                 return False #cannot interfere w already existing primary key
             
