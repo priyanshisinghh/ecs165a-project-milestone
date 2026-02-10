@@ -122,6 +122,41 @@ class Table:
         return True
 
     def __merge(self):
-        print("merge is happening")
-        pass
+        new_base_page = Base_Page(self.num_columns)
+        new_page_directory = {}
+
+        for rid in self.page_directory:
+            is_base, base_offset = self.page_directory[rid]
+
+            #Base record merge
+            if not is_base:
+                continue
+
+            #read base values
+            merged_data = []
+            for i in range(self.num_columns):
+                val = self.base_page.columns[METADATA_COLUMNS + i].read(base_offset)
+                merged_data.append(val)
+
+            #check  tail record
+            tail_rid = self.base_page.columns[INDIRECTION_COLUMN].read(base_offset)
+
+            if tail_rid != -1 and tail_rid in self.page_directory:
+                tail_is_base, tail_offset = self.page_directory[tail_rid]
+                if tail_is_base == False:
+                    for i in range(self.num_columns):
+                        merged_data[i] = self.tail_page.columns[METADATA_COLUMNS + i].read(tail_offset)
+
+            #write the merged record into the new base page
+            metadata = [-1, rid, int(time()), 0]
+            new_offset = new_base_page.update(*(metadata + merged_data))
+            new_page_directory[rid] = (True, new_offset)
+
+        #replace old pages w/ merged ones
+        self.base_page = new_base_page
+        self.page_directory = new_page_directory
+        self.tail_page = Tail_Page(self.num_columns)
+
+        #reset rid counter to one higher than the highest current RID
+        self.rid_num = max(new_page_directory.keys()) + 1 if new_page_directory else 0
  
