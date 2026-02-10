@@ -109,7 +109,6 @@ class Query:
     def select(self, search_key, search_key_index, projected_columns_index):
         rIDs = self.table.index.locate(search_key_index, search_key)
         records = []
-        # does primitive megre to
 
         for rID in rIDs:
             base, entry = self.table.page_directory[rID]
@@ -153,12 +152,13 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum(self, start_range, end_range, aggregate_column_index):
-        rIDs = self.table.index.locate_range(aggregate_column_index, start_range, end_range)
+        rIDs = self.table.index.locate_range(self.table.key, start_range, end_range)
 
         if rIDs == 0:
             return False
         #print(len(rIDs))
         total = 0
+
         # for it work with the other function
         search_columns = [0]*self.table.num_columns
         search_columns[aggregate_column_index] = 1
