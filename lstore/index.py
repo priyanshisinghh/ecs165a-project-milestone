@@ -21,7 +21,7 @@ class Index:
 
     def locate(self, column, value):
         #bounds check/existing check (for all functions)
-        if column > self.columns or column < 0:
+        if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
 
         if self.indices[column] is None:
@@ -38,7 +38,7 @@ class Index:
     """
 
     def locate_range(self, column, begin, end):
-        if column > self.columns or column < 0:
+        if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
 
         if self.indices[column] is None:
@@ -63,7 +63,7 @@ class Index:
     """
 
     def create_index(self, column):
-        if column > self.columns or column < 0:
+        if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
 
         if self.indices[column] is not None:
@@ -76,7 +76,7 @@ class Index:
     """
 
     def drop_index(self, column):
-        if column > self.columns or column < 0:
+        if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
 
         if self.indices[column] is None:
@@ -89,7 +89,7 @@ class Index:
 
 
     def insert_entry(self, column, key, RID):
-        if column > self.columns or column < 0:
+        if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
 
         if self.indices[column] is None:
@@ -120,7 +120,7 @@ class Index:
             index[key] = [RID]
 
     def remove_entry(self, column, key):
-        if column > self.columns or column < 0:
+        if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
 
         if self.indices[column] is None or column == self.table.key:
