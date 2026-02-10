@@ -12,6 +12,7 @@ class Index:
         self.columns = table.num_columns
         self.indices = [None] * self.columns 
         self.create_index(table.key)
+        self.table = table
 
     """
       returns the location of all records with the given value on column "column"
@@ -81,7 +82,7 @@ class Index:
         if self.indices[column] is None:
             return False
 
-        if column == table.key:
+        if column == self.table.key:
             return False
 
         self.indices[column] = None
@@ -93,6 +94,10 @@ class Index:
 
         if self.indices[column] is None:
             return False
+
+        if column == self.table.key:
+            if index.get(key) is not None:
+                return False
 
         index = self.indices[column]
         
@@ -118,8 +123,7 @@ class Index:
         if column > self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
 
-        if self.indices[column] is None or column == table.key:
-            print("no index/cannot remove key")
+        if self.indices[column] is None or column == self.table.key:
             return False
 
         index = self.indices[column]
