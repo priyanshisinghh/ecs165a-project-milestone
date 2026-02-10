@@ -1,7 +1,6 @@
 """
 A data strucutre holding indices for various columns of a table. Key column should be indexd by default, other columns can be indexed through this object. Indices are usually B-Trees, but other data structures can be used as well.
 """
-from lstore.table import Table
 from sortedcontainers import SortedDict
 #sorted dict automatically sorts the dictionary, generally same functionalities
 #to download do pip install sortedcontainer
