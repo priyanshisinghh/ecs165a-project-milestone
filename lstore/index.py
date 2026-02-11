@@ -13,6 +13,7 @@ class Index:
         self.indices = [None] * self.columns 
         self.create_index(table.key)
         self.table = table
+        #random
 
     """
       returns the location of all records with the given value on column "column"
