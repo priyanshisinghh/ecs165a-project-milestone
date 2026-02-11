@@ -83,11 +83,10 @@ class Table:
             for val in range(self.num_columns):
                 old_data.append(self.tail_page.columns[METADATA_COLUMNS + val].read(temp_prev_location))
         
-        # Fill in None values with old data, set schema encoding bits
+        # Sets schema to all 1's for culmative and replaces any Nones with old data
         for i, val in enumerate(data):
             if val is None:
                 data[i] = old_data[i]
-            # Set the bit for this column (1 = updated) -> had to look up how to do this
             schema_encoding |= (1 << (reverse - i - 1))
         
         metadata = [prev_tail, new_rID, int(time()), schema_encoding]
@@ -100,7 +99,6 @@ class Table:
         return True
 
     def __merge(self):
-        # print("merge is happening")
         
         new_base_page = Base_Page(self.num_columns)
         new_page_directory = {}
