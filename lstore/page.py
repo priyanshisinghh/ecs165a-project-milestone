@@ -1,278 +1,99 @@
-from lstore.table import Table, Record
-from lstore.index import Index
-
-METADATA_COLUMNS = 4
-INDIRECTION_COLUMN = 0
+VALUE_SIZE = 8
+METADATA_COLUMNS = 4 
+INDIRECTION_COLUMN = 0 
+RID_COLUMN = 1
+TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
+PAGE_SIZE = 4096
+VALUES_PER_PAGE = PAGE_SIZE // VALUE_SIZE
 
-class Query:
-    """
-    # Creates a Query object that can perform different queries on the specified table 
-    Queries that fail must return False
-    Queries that succeed should return the result or True
-    Any query that crashes (due to exceptions) should return False
-    """
-    def __init__(self, table):
-        self.table = table
+class Page:
+    def __init__(self):
+        self.num_records = 0
+        self.size = PAGE_SIZE
+        self.ptr = 0 # points to the end of written portion (first empty byte)
+        self.data = bytearray(self.size)
 
-    """
-    reads the latest version of a certain RID
-    """
-    def latest_record(self, search_RID, column_indexs):
-        base, base_location = self.table.page_directory[search_RID]
-        if base != True:
-            return False
+    # returns remaining capacity of page
+    def has_capacity(self):
+        return (VALUE_SIZE + self.ptr) <= self.size
 
-        indirection = self.table.base_page.columns[INDIRECTION_COLUMN].read(base_location)
-        values = [None]*self.table.num_columns
+    # everything is in bits so read will have to turn it back
+    def write(self, value):
+        #failsafe for if you are writing "none" data
+        if value is None:
+            self.data[self.ptr: self.ptr + VALUE_SIZE] = (0).to_bytes(VALUE_SIZE, byteorder = 'big', signed = True)
+            self.ptr += VALUE_SIZE
+            self.num_records += 1
+            return
+        self.data[self.ptr:self.ptr + VALUE_SIZE] = (value).to_bytes(VALUE_SIZE, byteorder = "big",signed = True)
+        self.num_records += 1
+        self.ptr += VALUE_SIZE
+    
+    def overwrite(self, offset, value):
+        start = int(offset*VALUE_SIZE)
+        self.data[start : start + VALUE_SIZE] = (value).to_bytes(VALUE_SIZE, byteorder = "big", signed = True)
 
-        #if it has no updates, read base record
-        if indirection in (0, -1):
-            for i in range(self.table.num_columns):
-                if not column_indexs[i]:
-                    continue
-                values[i] = self.table.base_page.columns[METADATA_COLUMNS + i].read(base_location)
+    def read(self, offset):
+        start = int(offset*VALUE_SIZE)
+        return int.from_bytes(self.data[start : start + VALUE_SIZE], byteorder='big', signed=True)
 
-        #if it has updates, go to newest tail
+# to avoid duplicate work for Base Page and Tail page logic
+class Page_Column:
+    def __init__(self):
+        self.pages = [Page()]
+        self.page_num = 1 # debug info
+    
+    # writes to the end of the column 
+    # allocates new page if there is not enough space
+    def write(self, data):
+        page = self.pages[-1]
+        if not page.has_capacity():
+            new_page = Page()
+            self.pages.append(new_page)
+            self.page_num += 1
+            new_page.write(data)
         else:
-            tail, tail_location = self.table.page_directory[indirection]
-            for i in range(self.table.num_columns):
-                if not column_indexs[i]:
-                    continue
-                values[i] = self.table.tail_page.columns[METADATA_COLUMNS + i].read(tail_location)
+            page.write(data)
 
-        return Record(search_RID, values[self.table.key], values)
+    # reads using the rID
+    #gets page and offset using math and RID
+    #not actual RID, it uses base/tail page counter instead of RID
+    def read(self, rID):
+        page = int(rID // VALUES_PER_PAGE)
+        offset = int(rID % VALUES_PER_PAGE)
+        # print("read rid", rID, page, offset, self.page_num)
+        return self.pages[page].read(offset)
 
-    """
-    # internal Method
-    # Read a record with specified RID
-    # Returns True upon succesful deletion
-    # Return False if record doesn't exist or is locked due to 2PL
-    """
-    def delete(self, primary_key):
-        #find RID for the given primary key
-        rIDs = self.table.index.locate(self.table.key, primary_key)
+    #replace val @ rID (for updating indirection pointers)
+    def replace(self, rID, data):
+        page = int(rID // VALUES_PER_PAGE)
+        offset = int(rID % VALUES_PER_PAGE)  #had to add int to fix error
+        self.pages[page].overwrite(offset, data)
+    
 
-        #if there is nothing to delete the query fails
-        if not rIDs:
-            return False
+class Base_Page:
+    def __init__(self, columns):
+        self.num_records = 0
+        self.column_num = columns
+        self.columns = [Page_Column() for i in range(0, METADATA_COLUMNS + columns)]
 
-        self.table.index.remove_entry(self.table.key, primary_key)
-        return True
+    def update(self, *data):
+        for i, cur_data in enumerate(data):
+            self.columns[i].write(cur_data)
+        self.num_records += 1
+        return self.num_records - 1
+    
+class Tail_Page:
+    def __init__(self, columns):
+        self.num_records = 0
+        self.column_num = columns
+        self.columns = [Page_Column() for i in range(0, METADATA_COLUMNS + columns)]
 
-    """
-    # Insert a record with specified columns
-    # Return True upon succesful insertion
-    # Returns False if insert fails for whatever reason
-    """
-    def insert(self, *columns):
-        return self.table.insert(list(columns))
-
-    """
-    # Read matching record with specified search key
-    # :param search_key: the value you want to search based on
-    # :param search_key_index: the column index you want to search based on
-    # :param projected_columns_index: what columns to return. array of 1 or 0 values.
-    # Returns a list of Record objects upon success
-    # Returns False if record locked by TPL
-    # Assume that select will never be called on a key that doesn't exist
-    """
-    def select(self, search_key, search_key_index, projected_columns_index):
-        #lookup RIDs using index
-        rIDs = self.table.index.locate(search_key_index, search_key)
-        if not rIDs:
-            return []
-
-        records = []
-        for rID in rIDs:
-            base, entry = self.table.page_directory[rID]
-            #we can only use base records for entry points
-            if base == True: 
-                record = self.latest_record(rID, projected_columns_index)
-                records.append(record)
-                continue
-
-        return records
-
-    """
-    # Read matching record with specified search key
-    # :param search_key: the value you want to search based on
-    # :param search_key_index: the column index you want to search based on
-    # :param projected_columns_index: what columns to return. array of 1 or 0 values.
-    # :param relative_version: the relative version of the record you need to retreive.
-    # Returns a list of Record objects upon success
-    # Returns False if record locked by TPL
-    # Assume that select will never be called on a key that doesn't exist
-    """
-    def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
-        #locate RIDs for search key
-        rIDs = self.table.index.locate(search_key_index, search_key)
-        if not rIDs:
-            return []  # Changed from False to [] for consistency
-
-        records = []
-
-        for rID in rIDs:
-            base, base_location = self.table.page_directory[rID]
-            #only want to enter using base records
-            if base != True:
-                continue
-
-            #read indirection pointer
-            indirection = self.table.base_page.columns[INDIRECTION_COLUMN].read(base_location)
-            values = [None]*self.table.num_columns
-
-            #if there are no updates, only base exists, so use those values
-            if indirection == -1:
-                for i in range(self.table.num_columns):
-                    if not projected_columns_index[i]:
-                        continue
-                    values[i] = self.table.base_page.columns[METADATA_COLUMNS + i].read(base_location)
-
-                records.append(Record(rID, values[self.table.key], values))
-                continue
-
-            #latest version - take these values
-            if relative_version >= 0:
-                tail, tail_location = self.table.page_directory[indirection]
-                for i in range(self.table.num_columns):
-                    if not projected_columns_index[i]:
-                        continue
-                    values[i] = self.table.tail_page.columns[METADATA_COLUMNS + i].read(tail_location)
-
-                records.append(Record(rID, values[self.table.key], values))
-                continue
-
-            #for older versions (negative value): walk backwards, go to base
-            if relative_version < 0:
-                steps = -relative_version
-                current_tail_rid = indirection
-                current_tail_location = self.table.page_directory[current_tail_rid][1]
-
-                #loop thru previous versions
-                for _ in range(steps):
-                    prev = self.table.tail_page.columns[INDIRECTION_COLUMN].read(current_tail_location)
-
-                    #stop if the base is reached
-                    if prev == -1:
-                        current_tail_rid = None
-                        break
-
-                    prev_flag, prev_loc = self.table.page_directory[prev]
-                    if prev_flag == True:
-                        current_tail_rid = None
-                        break
-
-                    current_tail_rid = prev
-                    current_tail_location = prev_loc
-
-                if current_tail_rid is None:
-                    #fall back to base record if there is no current tail RID
-                    for i in range(self.table.num_columns):
-                        if not projected_columns_index[i]:
-                            continue
-                        values[i] = self.table.base_page.columns[METADATA_COLUMNS + i].read(base_location)
-                else:
-                    #read the requested historical tail
-                    for i in range(self.table.num_columns):
-                        if not projected_columns_index[i]:
-                            continue
-                        values[i] = self.table.tail_page.columns[METADATA_COLUMNS + i].read(current_tail_location)
-
-                records.append(Record(rID, values[self.table.key], values))
-                continue
-
-            #if positive versions are not used, default to base
-            for i in range(self.table.num_columns):
-                if not projected_columns_index[i]:
-                    continue
-                values[i] = self.table.base_page.columns[METADATA_COLUMNS + i].read(base_location)
-
-            records.append(Record(rID, values[self.table.key], values))
-
-        return records
-
-    """
-    # Update a record with specified key and columns
-    # Returns True if update is succesful
-    # Returns False if no records exist with given key or if the target record cannot be accessed due to 2PL locking
-    """
-    def update(self, primary_key, *columns):
-        return self.table.update(primary_key, list(columns))
-
-    """
-    :param start_range: int         # Start of the key range to aggregate 
-    :param end_range: int           # End of the key range to aggregate 
-    :param aggregate_columns: int  # Index of desired column to aggregate
-    # this function is only called on the primary key.
-    # Returns the summation of the given range upon success
-    # Returns False if no record exists in the given range
-    """
-    def sum(self, start_range, end_range, aggregate_column_index):
-        #find all BASE RIDs in the primary key range
-        rIDs = self.table.index.locate_range(self.table.key, start_range, end_range)
-        if not rIDs:
-            return False
-
-        total = 0
-        search_columns = [0]*self.table.num_columns
-        search_columns[aggregate_column_index] = 1
-
-        for rID in rIDs:
-            record = self.latest_record(rID, search_columns)
-            if record is not False:  # Added check to handle potential False return
-                total += record.columns[aggregate_column_index]
-
-        return total
-
-    """
-    :param start_range: int         # Start of the key range to aggregate 
-    :param end_range: int           # End of the key range to aggregate 
-    :param aggregate_columns: int  # Index of desired column to aggregate
-    :param relative_version: the relative version of the record you need to retreive.
-    # this function is only called on the primary key.
-    # Returns the summation of the given range upon success
-    # Returns False if no record exists in the given range
-    """
-    def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
-        rIDs = self.table.index.locate_range(self.table.key, start_range, end_range)
-        if not rIDs:
-            return False
-
-        total = 0
-        search_columns = [0]*self.table.num_columns
-        search_columns[aggregate_column_index] = 1
-
-        for rID in rIDs:
-            base, base_location = self.table.page_directory[rID]
-            if base != True:
-                continue
-
-            # convert RID to primary key value so that select_version gets the right searchkey
-            pk_val = self.table.base_page.columns[METADATA_COLUMNS + self.table.key].read(base_location)
-            records = self.select_version(pk_val, self.table.key, search_columns, relative_version)
-            
-            # Fixed: Check if records list is not empty before accessing
-            if records and len(records) > 0:
-                total += records[0].columns[aggregate_column_index]
-
-        return total
-
-    """
-    incremenets one column of the record
-    this implementation should work if your select and update queries already work
-    :param key: the primary of key of the record to increment
-    :param column: the column to increment
-    # Returns True is increment is successful
-    # Returns False if no record matches key or if target record is locked by 2PL.
-    """
-    def increment(self, key, column):
-        records = self.select(key, self.table.key, [1] * self.table.num_columns)
-        # Fixed: Check if records list is not empty
-        if records and len(records) > 0:
-            r = records[0]
-            updated_columns = [None] * self.table.num_columns
-            updated_columns[column] = r.columns[column] + 1
-            u = self.update(key, *updated_columns)
-            return u
-        return False
+    # Doesn't check if there is space in the page, thats the responsibility of calling function
+    def append(self, *data):
+        for i, cur_data in enumerate(data):
+            self.columns[i].write(cur_data)
+        self.num_records += 1
+        return self.num_records - 1 
+    
