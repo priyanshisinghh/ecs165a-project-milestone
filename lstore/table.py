@@ -87,7 +87,7 @@ class Table:
         for i, val in enumerate(data):
             if val is None:
                 data[i] = old_data[i]
-            # Set the bit for this column (1 = updated)
+            # Set the bit for this column (1 = updated) <- had to look this up
             schema_encoding |= (1 << (reverse - i - 1))
         
         metadata = [prev_tail, new_rID, int(time()), schema_encoding]

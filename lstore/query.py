@@ -108,7 +108,7 @@ class Query:
         #locate RIDs for search key
         rIDs = self.table.index.locate(search_key_index, search_key)
         if not rIDs:
-            return []  # Changed from False to [] for consistency
+            return []
 
         records = []
 
@@ -252,7 +252,7 @@ class Query:
             pk_val = self.table.base_page.columns[METADATA_COLUMNS + self.table.key].read(base_location)
             records = self.select_version(pk_val, self.table.key, search_columns, relative_version)
             
-            # Fixed: Check if records list is not empty before accessing
+            #check if records list is not empty before accessing
             if records and len(records) > 0:
                 total += records[0].columns[aggregate_column_index]
 
@@ -268,7 +268,7 @@ class Query:
     """
     def increment(self, key, column):
         records = self.select(key, self.table.key, [1] * self.table.num_columns)
-        # Fixed: Check if records list is not empty
+        # check if records list is not empty
         if records and len(records) > 0:
             r = records[0]
             updated_columns = [None] * self.table.num_columns
