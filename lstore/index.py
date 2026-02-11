@@ -1,9 +1,9 @@
 """
 A data strucutre holding indices for various columns of a table. Key column should be indexd by default, other columns can be indexed through this object. Indices are usually B-Trees, but other data structures can be used as well.
 """
+
+#might be allowed? unsure
 from sortedcontainers import SortedDict
-#sorted dict automatically sorts the dictionary, generally same functionalities
-#to download do pip install sortedcontainer
 
 class Index:
 
@@ -13,7 +13,6 @@ class Index:
         self.indices = [None] * self.columns 
         self.create_index(table.key)
         self.table = table
-        #random
 
     """
       returns the location of all records with the given value on column "column"
@@ -88,6 +87,9 @@ class Index:
 
         self.indices[column] = None
 
+    """
+    # insert_entry -> adding RID to ind for col value when new record added to table
+    """
 
     def insert_entry(self, column, key, RID):
         if column >= self.columns or column < 0:
@@ -98,15 +100,6 @@ class Index:
 
         index = self.indices[column]
         
-        """
-        if there is already a key with the same value, we want to add the RID
-        to the already existing key. therefore, all of our dictionary values
-        should be held in lists.
-
-        there is a special case for the primary key column, because there cannot be multiple RIDs per key.
-        """
-        
-        # Fixed: changed table.key to self.table.key
         if column == self.table.key:
             if index.get(key) is not None:
                 return False #cannot interfere w already existing primary key
@@ -115,10 +108,12 @@ class Index:
             index[key].append(RID)
         else:
             index[key] = [RID]
-        
-        # Added missing return statement
+
         return True
 
+    """
+    Removing key and RIDs from index
+    """
     def remove_entry(self, column, key):
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
