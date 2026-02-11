@@ -168,15 +168,12 @@ class Table:
                     for i in range(self.num_columns):
                         merged_data[i] = self.tail_page.columns[METADATA_COLUMNS + i].read(tail_offset)
             
-            # Write merged record into new base page
             metadata = [-1, rid, int(time()), 0]
             new_offset = new_base_page.update(*(metadata + merged_data))
             new_page_directory[rid] = (True, new_offset)
         
-        # Step 4-5: Replace old pages with merged ones
         self.base_page = new_base_page
         self.page_directory = new_page_directory
         self.tail_page = Tail_Page(self.num_columns)
         
-        # Reset RID counter to continue from highest existing RID
         self.rid_num = max(new_page_directory.keys()) + 1 if new_page_directory else 0
