@@ -20,9 +20,10 @@ class Transaction:
     def add_query(self, query, table, *args):
         self.queries.append((query, args))
         #use table for append
+        #poop poopppopopopp
+        #popopopopopopoppop
 
-        
-    #if you choose to implement this differently this method must still return True if transaction commits or False on abort
+
     def run(self):
         for query, args in self.queries:
             result = query(*args)
