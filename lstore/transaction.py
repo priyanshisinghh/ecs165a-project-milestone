@@ -20,9 +20,6 @@ class Transaction:
     def add_query(self, query, table, *args):
         self.queries.append((query, args))
         #use table for append
-        #poop poopppopopopp
-        #popopopopopopoppop
-
 
     def run(self):
         for query, args in self.queries:
