@@ -143,7 +143,7 @@ class Query:
                 records.append(Record(rID, values[self.table.key], values))
                 continue
 
-            #for older versions (negative value): walk backwards, go to base
+            #for older versions
             if relative_version < 0:
                 steps = -relative_version
                 current_tail_rid = indirection
@@ -173,7 +173,7 @@ class Query:
                             continue
                         values[i] = self.table.base_page.columns[METADATA_COLUMNS + i].read(base_location)
                 else:
-                    #read the requested historical tail
+                    #reading tail
                     for i in range(self.table.num_columns):
                         if not projected_columns_index[i]:
                             continue
@@ -220,7 +220,7 @@ class Query:
 
         for rID in rIDs:
             record = self.latest_record(rID, search_columns)
-            if record is not False:  # Added check to handle potential False return
+            if record is not False: 
                 total += record.columns[aggregate_column_index]
 
         return total
@@ -252,7 +252,6 @@ class Query:
             pk_val = self.table.base_page.columns[METADATA_COLUMNS + self.table.key].read(base_location)
             records = self.select_version(pk_val, self.table.key, search_columns, relative_version)
             
-            # Fixed: Check if records list is not empty before accessing
             if records and len(records) > 0:
                 total += records[0].columns[aggregate_column_index]
 
@@ -268,7 +267,6 @@ class Query:
     """
     def increment(self, key, column):
         records = self.select(key, self.table.key, [1] * self.table.num_columns)
-        # Fixed: Check if records list is not empty
         if records and len(records) > 0:
             r = records[0]
             updated_columns = [None] * self.table.num_columns
