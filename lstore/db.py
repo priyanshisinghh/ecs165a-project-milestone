@@ -1,13 +1,16 @@
 from lstore.table import Table
 
+#handles all the tables in the system 
+# -> loading tables to/from disk, getting transactions from many tables, db level locks
 class Database():
 
+    #make empty db
     def __init__(self):
-        self.table_count = 0
-        self.tables = []
+        self.table_count = 0 #total num tables made
+        self.tables = [] #
         pass
 
-    # Not required for milestone1
+    #not needed for milestone 1
     def open(self, path):
         pass
 
