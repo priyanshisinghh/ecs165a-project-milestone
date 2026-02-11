@@ -12,7 +12,7 @@ class Page:
     def __init__(self):
         self.num_records = 0
         self.size = PAGE_SIZE
-        self.ptr = 0 # points to the end of written portion (first empty byte)
+        self.ptr = 0 # points to the end of written portion 
         self.data = bytearray(self.size)
 
     # returns remaining capacity of page
@@ -66,10 +66,9 @@ class Page_Column:
         # print("read rid", rID, page, offset, self.page_num)
         return self.pages[page].read(offset)
 
-    #replace val @ rID (for updating indirection pointers)
     def replace(self, rID, data):
         page = int(rID // VALUES_PER_PAGE)
-        offset = int(rID % VALUES_PER_PAGE)  # <-- FIXED: Added int()
+        offset = int(rID % VALUES_PER_PAGE)  
         self.pages[page].overwrite(offset, data)
     
 
@@ -95,7 +94,6 @@ class Tail_Page:
         self.column_num = columns
         self.columns = [Page_Column() for i in range(0, METADATA_COLUMNS + columns)]
 
-    # Doesn't check if there is space in the page, thats the responsibility of calling function
     def append(self, *data):
         for i, cur_data in enumerate(data):
             self.columns[i].write(cur_data)
