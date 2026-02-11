@@ -88,7 +88,6 @@ class Table:
             if val is None:
                 data[i] = old_data[i]
             # Set the bit for this column (1 = updated)
-            #poop
             schema_encoding |= (1 << (reverse - i - 1))
         
         metadata = [prev_tail, new_rID, int(time()), schema_encoding]
