@@ -83,7 +83,6 @@ class Query:
         if not rIDs:
             return []
 
-        #this can be used for non primary keys, but that won't be necessary for milestone 1
         records = []
         for rID in rIDs:
             base, entry = self.table.page_directory[rID]
