@@ -81,6 +81,10 @@ class Table:
         rIDs = self.index.locate(self.key, primary_key)
         if not rIDs:
             return False
+        new_primary_key =  data[self.key]
+        exists = self.index.locate(self.key, new_primary_key)
+        if exists:
+            return False
         
         # Get the first (should be only) RID
         rID = rIDs[0]
