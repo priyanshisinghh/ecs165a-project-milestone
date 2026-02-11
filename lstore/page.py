@@ -65,10 +65,11 @@ class Page_Column:
         # print("read rid", rID, page, offset, self.page_num)
         return self.pages[page].read(offset)
 
+    #replace val @ rID (for updating indirection pointers)
     def replace(self, rID, data):
         page = int(rID // VALUES_PER_PAGE)
-        offset =  rID % VALUES_PER_PAGE
-        self.pages[page].overwrite(offset,data)
+        offset = int(rID % VALUES_PER_PAGE)  # <-- FIXED: Added int()
+        self.pages[page].overwrite(offset, data)
     
 
 class Base_Page:
