@@ -134,7 +134,7 @@ class Query:
                 continue
 
             #latest version - take these values
-            if relative_version == 0:
+            if relative_version >= 0:
                 tail, tail_location = self.table.page_directory[indirection]
                 for i in range(self.table.num_columns):
                     if not projected_columns_index[i]:
