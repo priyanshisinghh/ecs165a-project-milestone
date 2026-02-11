@@ -16,30 +16,21 @@ class Record:
 
 
 class Table:
-    """
-    Main table class that handles record storage and retrieval
-    Uses base pages for original records and tail pages for updates
-    """
     
     def __init__(self, name, num_columns, key):
         self.name = name
         self.key = key  # Which column is the primary key
         self.num_columns = num_columns
         
-        # Pages for storing data
         self.base_page = Base_Page(num_columns)  # Original records
         self.tail_page = Tail_Page(num_columns)  # Updates to records
         
-        # Maps RID -> (is_base: bool, offset: int)
         self.page_directory = {}
-        
-        # Index for fast lookups
+
         self.index = Index(self)
-        
-        # Counter for generating unique RIDs
+
         self.rid_num = 0
-        
-        # Trigger merge after this many tail records
+
         self.merge_threshold_pages = 50
 
     def insert(self, data):
