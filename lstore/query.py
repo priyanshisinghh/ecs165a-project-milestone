@@ -15,9 +15,7 @@ class Query:
     def __init__(self, table):
         self.table = table
 
-    """
-    reads the latest version of a certain RID
-    """
+    #reads the latest version of a certain RID
     def latest_record(self, search_RID, column_indexs):
         base, base_location = self.table.page_directory[search_RID]
         if base != True:
@@ -108,7 +106,7 @@ class Query:
         #locate RIDs for search key
         rIDs = self.table.index.locate(search_key_index, search_key)
         if not rIDs:
-            return []  # Changed from False to [] for consistency
+            return []  
 
         records = []
 
@@ -132,7 +130,7 @@ class Query:
                 records.append(Record(rID, values[self.table.key], values))
                 continue
 
-            #latest version - take these values
+            #take these values
             if relative_version >= 0:
                 tail, tail_location = self.table.page_directory[indirection]
                 for i in range(self.table.num_columns):
@@ -143,7 +141,7 @@ class Query:
                 records.append(Record(rID, values[self.table.key], values))
                 continue
 
-            #for older versions (negative value): walk backwards, go to base
+            #neg values -> walk backwards, go to base
             if relative_version < 0:
                 steps = -relative_version
                 current_tail_rid = indirection
@@ -220,7 +218,7 @@ class Query:
 
         for rID in rIDs:
             record = self.latest_record(rID, search_columns)
-            if record is not False:  # Added check to handle potential False return
+            if record is not False:  # Added check to handle False return
                 total += record.columns[aggregate_column_index]
 
         return total
@@ -252,7 +250,7 @@ class Query:
             pk_val = self.table.base_page.columns[METADATA_COLUMNS + self.table.key].read(base_location)
             records = self.select_version(pk_val, self.table.key, search_columns, relative_version)
             
-            # Fixed: Check if records list is not empty before accessing
+            #check if records list is not empty before accessing
             if records and len(records) > 0:
                 total += records[0].columns[aggregate_column_index]
 
@@ -268,7 +266,7 @@ class Query:
     """
     def increment(self, key, column):
         records = self.select(key, self.table.key, [1] * self.table.num_columns)
-        # Fixed: Check if records list is not empty
+        # check if records list is not empty
         if records and len(records) > 0:
             r = records[0]
             updated_columns = [None] * self.table.num_columns

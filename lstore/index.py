@@ -15,7 +15,7 @@ class Index:
 
     """
       returns the location of all records with the given value on column "column"
-      i assume if the value cannot be found/if the function fails it returns false
+      i assume if the value cannot be found/if the function fails it returns false? yea
     """
 
     def locate(self, column, value):
@@ -101,7 +101,7 @@ class Index:
         
         if column == self.table.key:
             if index.get(key) is not None:
-                return False #cannot interfere w already existing primary key
+                return False #cannot interfere w already existing primary key -> was throwing error before
             
         if index.get(key) is not None:
             index[key].append(RID)

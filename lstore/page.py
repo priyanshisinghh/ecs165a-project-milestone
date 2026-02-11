@@ -1,5 +1,4 @@
-# these are constants but they can be put into config.py
-VALUE_SIZE = 8 # size of the data
+VALUE_SIZE = 8
 METADATA_COLUMNS = 4 
 INDIRECTION_COLUMN = 0 
 RID_COLUMN = 1
@@ -69,7 +68,7 @@ class Page_Column:
     #replace val @ rID (for updating indirection pointers)
     def replace(self, rID, data):
         page = int(rID // VALUES_PER_PAGE)
-        offset = int(rID % VALUES_PER_PAGE)  # <-- FIXED: Added int()
+        offset = int(rID % VALUES_PER_PAGE)  #had to add int to fix error
         self.pages[page].overwrite(offset, data)
     
 
@@ -79,10 +78,6 @@ class Base_Page:
         self.column_num = columns
         self.columns = [Page_Column() for i in range(0, METADATA_COLUMNS + columns)]
 
-    """
-    :param   Data's first couple columns are metadata
-    :returns index of where the record is in each page
-    """
     def update(self, *data):
         for i, cur_data in enumerate(data):
             self.columns[i].write(cur_data)
