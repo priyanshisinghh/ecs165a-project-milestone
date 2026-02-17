@@ -1,6 +1,7 @@
 from typing import Any, Dict, Optional, Tuple
 
 PageId = Tuple[str, str, int, int]  # (table, "base"/"tail", col, page_index)
+#page index is used to find the location of the page that is requested; similar to how column gives the column of the requested page, page index gives the row
 
 
 class Frame:
