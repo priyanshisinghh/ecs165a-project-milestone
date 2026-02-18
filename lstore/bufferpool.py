@@ -5,7 +5,7 @@ PageId = Tuple[str, str, int, int]  # (table, "base"/"tail", col, page_index)
 
 
 class Frame:
-    def __init__(self, page: Any, dirty: bool = False, dirty_seq: int = 0, pin_count: int = 0, last_used: int = 0):
+    def __init__(self, page, dirty, dirty_seq, pin_count, last_used):
         self.page = page
         self.dirty = dirty
         self.dirty_seq = dirty_seq
@@ -15,39 +15,35 @@ class Frame:
 
 #fixed size bifferpool with pin and unpin, dirty tracking, least recently used eviction, and disk read/write
 class Bufferpool:
-    def __init__(self, capacity_pages: int, disk_manager):
-        #make sure we have any pages and a disk manager
-        if capacity_pages <= 0:
-            raise ValueError(f"capacity pages must be > 0, got {capacity_pages}")
-        if disk_manager is None:
-            raise ValueError("disk manager cannot be None")
-
+    def __init__(self, capacity_pages, disk_manager):
         self.capacity = capacity_pages
         self.disk = disk_manager
         self.frames: Dict[PageId, Frame] = {}
 
         self.clock = 0
+
+        #checkpoint for dirty pages, make sure newly dirtied pages are not marked clean
         self.dirty_clock = 0
 
     #records when a frame was last used
-    def last_touched(self, frame: Frame):
+    def last_touched(self, frame):
         self.clock += 1
         frame.last_used = self.clock
 
-    def next_dirty_seq(self) -> int:
+    def next_dirty_seq(self):
         self.dirty_clock += 1
         return self.dirty_clock
 
     #writes a page to disk
-    def write_page_to_disk(self, page_id: PageId, page: Any):
+    def write_page_to_disk(self, page_id, page):
         table, page_type, col, page_index = page_id
         self.disk.write_page(table, page_type, col, page_index, page)
 
     #pins and returns page, must be used with unpin
-    def get_page(self, page_id: PageId):
+    def get_page(self, page_id):
         frame = self.frames.get(page_id)
 
-        #check if frame exists and if there is space
+        #check if frame is already in bufferpool and if there is space in bufferpool
         if frame is not None:
             frame.pin_count += 1
             self.last_touched(frame)
@@ -65,15 +61,15 @@ class Bufferpool:
         if page is None:
             raise RuntimeError(f"Disk read returned None for page_id=  {page_id}")
 
+        #bring new page into bufferpool
         frame = Frame(page = page, dirty = False, dirty_seq = 0, pin_count = 1, last_used = 0)
         self.last_touched(frame)
         self.frames[page_id] = frame
         return page
 
-    def mark_dirty(self, page_id: PageId):
+    
+    def mark_dirty(self, page_id):
         frame = self.frames.get(page_id)
-        if frame is None:
-            raise KeyError(f"mark_dirty called for non-cached page_id = {page_id}")
         frame.dirty = True
         frame.dirty_seq = self.next_dirty_seq()
 
