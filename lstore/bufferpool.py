@@ -73,7 +73,7 @@ class Bufferpool:
         frame.dirty = True
         frame.dirty_seq = self.next_dirty_seq()
 
-    def unpin(self, page_id: PageId):
+    def unpin(self, page_id):
         frame = self.frames.get(page_id)
         #check if page is able to be unpinned
         if frame is None:
@@ -83,7 +83,7 @@ class Bufferpool:
         frame.pin_count -= 1
 
     #writes page from memory to disk
-    def flush_page(self, page_id: PageId, max_dirty_seq: Optional[int] = None):
+    def flush_page(self, page_id, max_dirty_seq = None):
         while True:
             frame = self.frames.get(page_id)
             #check if the frame can be written from memory to disk
@@ -126,8 +126,8 @@ class Bufferpool:
 
     #using LRU to unpin the page
     def evict_one(self):
-        victim_id: Optional[PageId] = None
-        victim_last_used: Optional[int] = None
+        victim_id = None
+        victim_last_used = None
 
         for pid, frame in self.frames.items():
             if frame.pin_count != 0:
