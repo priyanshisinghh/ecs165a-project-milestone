@@ -107,11 +107,8 @@ class Bufferpool:
                 frame.dirty = False
                 return
 
+#flush all dirty page + pages after this call not guaranteed to be flushed    
     def flush_all(self):
-        """
-        Flushes all pages dirty at the start of this call.
-        Pages dirtied after this call begins are not guaranteed to be flushed.
-        """
         cutoff_dirty_seq = self.dirty_clock
 
         while True:
@@ -127,10 +124,8 @@ class Bufferpool:
             for pid in pending:
                 self.flush_page(pid, max_dirty_seq=cutoff_dirty_seq)
 
+    #using LRU to unpin the page
     def evict_one(self):
-        """
-        Evict one unpinned page using LRU.
-        """
         victim_id: Optional[PageId] = None
         victim_last_used: Optional[int] = None
 
@@ -144,7 +139,7 @@ class Bufferpool:
         if victim_id is None:
             raise RuntimeError("Bufferpool full and all pages are pinned; cannot evict.")
 
-        # Remove first, then write back if dirty.
+        #remove first + then write back if dirty
         victim_frame = self.frames.pop(victim_id)
 
         if not victim_frame.dirty:
@@ -153,6 +148,6 @@ class Bufferpool:
         try:
             self.write_page_to_disk(victim_id, victim_frame.page)
         except Exception as e:
-            # Restore cache entry if eviction write-back fails.
+            #restore cache entry if eviction write-back fails.
             self.frames[victim_id] = victim_frame
             raise RuntimeError(f"Disk write failed during eviction for {victim_id}") from e
