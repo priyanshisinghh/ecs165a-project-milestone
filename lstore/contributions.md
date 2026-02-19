@@ -1,10 +1,13 @@
 # Contributions
 
-### Team Roles
+### **Team Roles**
 Team Coordinator: Priyanshi Singh 
+
 System Architect: Pavish Sanghu
+
 Developers: Ernest Hang & Beale Lopez
+
 Tester: Nickolas Ho
 
-### Team Contributions
+### **Team Contributions**
 Everyone in our team contributed equally
