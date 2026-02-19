@@ -1,11 +1,17 @@
 # handles writing to disk
+import os
+import struct
+
 
 class disk:
     def __init__(self, database):
-        self.page_size = 4096
-        self.int_size = 8
+        self.page_size = 4096 #match page class
+        self.int_size = 8 #64 bit
         self.table_directory = {} # table_id : location of entry
-        self.file
+        #self.file <- ill crash on init since its a single file
+    
+    #MIGHT NEED THIS??? IDKK =================================================================
+    #============================================================================
 
     def write_page(self, page, page_type, col, page_entry):
         self.file.seek(0)
