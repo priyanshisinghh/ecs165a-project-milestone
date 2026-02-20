@@ -23,6 +23,10 @@ class Query:
         if base != True:
             return False
 
+        #instead of reading directly from page, we will have to read from bufferpool.
+        #no idea how we're gonna get page_id but if we can then we can use bufferpool.get_page() to get the page
+        #use page to read indirection column
+        #we will need to replace all of the commands where we access page directly
         indirection = self.table.base_page.columns[INDIRECTION_COLUMN].read(base_location)
         values = [None]*self.table.num_columns
 
