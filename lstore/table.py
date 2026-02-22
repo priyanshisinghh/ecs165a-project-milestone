@@ -1,6 +1,7 @@
 from lstore.index import Index
 from time import time
 from lstore.page import Base_Page, Tail_Page, METADATA_COLUMNS
+from lstore.bufferpool import Bufferpool
 
 INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
@@ -29,6 +30,7 @@ class Table:
         self.tail_page = Tail_Page(num_columns) 
         self.page_directory = {}
         self.index = Index(self)
+        self.bufferpool = Bufferpool(50, Disk())
         self.rid_num = 0
         self.merge_threshold_pages = 50 # The threshold to trigger a merge
 
