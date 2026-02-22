@@ -4,7 +4,7 @@ import struct
 
 
 class disk:
-    def __init__(self, database):
+    def __init__(self):
         self.page_size = 4096 #match page class
         self.int_size = 8 #64 bit
         self.table_directory = {} # table_id : location of entry
