@@ -23,12 +23,12 @@ class Index:
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
 
-        if self.indices[column] is None:
+        index = self.indices[column]
+        if index is None:
             return []
 
-        index = self.indices[column]
         if value in index.keys():
-            return index.get(value, [])
+            return list(index.get(value, []))
             
         return []
 
@@ -94,10 +94,9 @@ class Index:
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
 
-        if self.indices[column] is None:
-            return False
-
         index = self.indices[column]
+        if index is None:
+            return False
         
         if column == self.table.key:
             if index.get(key) is not None:
@@ -111,12 +110,37 @@ class Index:
         return True
 
     """
-    Removing key and RIDs from index
+    # remove_entry -> removing RID to ind for col value, mainly using for update entry
     """
-    def remove_entry(self, column, key):
+    def remove_entry(self, column, key, RID):
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
 
+        index = self.indices[column]
+        if index is None:
+            return False
+        
+        if column == self.table.key:
+            return False #cannot interfere w already existing primary key -> was throwing error before
+            
+        if index.get(key) is None:
+            return False
+            
+        index[key].remove(RID)
+        if not index[key]:
+            del index[key] #make sure we don't keep empty lists in index
+        return True
+
+    """
+    Removing key and RIDs from index
+    """
+    def remove_key(self, column, key):
+        if column >= self.columns or column < 0:
+            raise ValueError("Column Out Of Bounds")
+
+        if column == self.table.key:
+            return False #cannot remove primary key
+            
         if self.indices[column] is None:
             return False
 
@@ -125,4 +149,18 @@ class Index:
             return False
 
         index.pop(key)
+        return True
+
+    def update_entry(self, column, old_value, new_value, RID):
+        if column >= self.columns or column < 0:
+            raise ValueError("Column Out Of Bounds")
+
+        if column == self.table.key:
+            return False #cannot update primary key
+            
+        if self.indices[column] is None:
+            return False
+
+        self.remove_entry(column, old_value, RID)
+        self.insert_entry(column, new_value, RID)
         return True
