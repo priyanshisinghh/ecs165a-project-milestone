@@ -35,7 +35,7 @@ class Query:
 
         #update record to have special values so the record shows as deleted
         invalidated_record = [None] * self.table.num_columns
-        self.table.update(primary_key, tombstone)
+        self.table.update(primary_key, invalidated_record)
 
         #remove from all active indexes
         for i in range(self.table.num_columns):
