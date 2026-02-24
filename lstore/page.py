@@ -1,13 +1,11 @@
 VALUE_SIZE = 8
-METADATA_COLUMNS = 4
 INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
-# new - extra column stored on every tail record so merge knows which base record it belongs to
 BASE_RID_COLUMN = 4
-# new - tail pages have 5 metadata columns (4 standard + base_rid)
 TAIL_METADATA_COLUMNS = 5
+BASE_METADATA_COLUMNS = 4 #base pages do not need the base rid column
 
 PAGE_SIZE = 4096
 VALUES_PER_PAGE = PAGE_SIZE // VALUE_SIZE  # 512 records per page
@@ -26,26 +24,26 @@ class Page:
 
     def write(self, value):
         if value is None:
-            self.data[self.ptr: self.ptr + VALUE_SIZE] = (0).to_bytes(VALUE_SIZE, byteorder='big', signed=True)
+            self.data[self.ptr: self.ptr + VALUE_SIZE] = (0).to_bytes(VALUE_SIZE, byteorder = 'big', signed = True)
         else:
-            self.data[self.ptr:self.ptr + VALUE_SIZE] = (value).to_bytes(VALUE_SIZE, byteorder="big", signed=True)
+            self.data[self.ptr: self.ptr + VALUE_SIZE] = (value).to_bytes(VALUE_SIZE, byteorder = "big", signed = True)
         self.num_records += 1
         self.ptr += VALUE_SIZE
 
     def overwrite(self, offset, value):
         start = int(offset * VALUE_SIZE)
-        self.data[start: start + VALUE_SIZE] = (value).to_bytes(VALUE_SIZE, byteorder="big", signed=True)
+        self.data[start: start + VALUE_SIZE] = (value).to_bytes(VALUE_SIZE, byteorder = "big", signed = True)
 
     def read(self, offset):
         start = int(offset * VALUE_SIZE)
-        return int.from_bytes(self.data[start: start + VALUE_SIZE], byteorder='big', signed=True)
+        return int.from_bytes(self.data[start: start + VALUE_SIZE], byteorder = 'big', signed = True)
 
 
 class Base_Page:
     def __init__(self, num_columns):
         self.num_records = 0
         self.num_columns = num_columns
-        self.total_columns = METADATA_COLUMNS + num_columns
+        self.total_columns = BASE_METADATA_COLUMNS + num_columns
         self.columns = [Page() for _ in range(self.total_columns)]
 
     def has_capacity(self):
@@ -68,7 +66,6 @@ class Base_Page:
 
 
 class Tail_Page:
-    # new - total_columns uses TAIL_METADATA_COLUMNS (5) so base_rid is stored per tail record
     def __init__(self, num_columns):
         self.num_records = 0
         self.num_columns = num_columns
@@ -101,12 +98,10 @@ class Page_Range:
         self.base_pages = [Base_Page(num_columns) for _ in range(num_base_pages)]
         self.tail_pages = [Tail_Page(num_columns)]
         self.current_base_page_index = 0
-        # new - TPS per base page: tracks the last tail RID merged into each base page
         self.tps = [0] * num_base_pages
-
-    # -------------------------
+    #---------------------------------
     # BASE PAGE OPERATIONS
-    # -------------------------
+    #---------------------------------
 
     def write_base(self, *data):
         while self.current_base_page_index < self.num_base_pages:
@@ -144,10 +139,6 @@ class Page_Range:
 
     def overwrite_tail(self, tail_page_index, slot, column_index, value):
         self.tail_pages[tail_page_index].overwrite(slot, column_index, value)
-
-    # -------------------------
-    # TPS
-    # -------------------------
 
     def get_tps(self, base_page_index):
         return self.tps[base_page_index]
