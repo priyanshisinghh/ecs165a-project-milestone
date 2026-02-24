@@ -87,104 +87,118 @@ class Table:
         return val
 
     def insert(self, data):
-        if len(data) != self.num_columns:
-            return False
+      if len(data) != self.num_columns:
+          return False
 
-        if self.index.locate(self.key, data[self.key]):
-            return False
+      if self.index.locate(self.key, data[self.key]):
+          return False
 
-        rid = self._new_base_rid()
-        # indirection = 0 means never updated
-        metadata = [0, rid, int(time()), 0]
-
-        pr_index = len(self.page_ranges) - 1
+      rid = self._new_base_rid()
+      metadata = [0, rid, int(time()), 0]
+      full_data = metadata + data
+  
+      pr_index = len(self.page_ranges) - 1
         if self.page_ranges[pr_index].base_is_full():
             self._add_page_range()
             pr_index += 1
-
-        pr = self.page_ranges[pr_index]
-        result = pr.write_base(*(metadata + data))
-        if result is None:
-            return False
-
-        bp_index, slot = result
-
-        # new - mark all base page columns dirty so bufferpool flushes them
-        for col_index in range(METADATA_COLUMNS + self.num_columns):
-            page_id = self._page_id(pr_index, 'base', col_index, bp_index)
-            page = self.bufferpool.get_page(page_id)
-            self.bufferpool.mark_dirty(page_id)
-            self.bufferpool.unpin(page_id)
-
-        self.page_directory[rid] = {
-            'is_base': True,
-            'page_range': pr_index,
-            'page_index': bp_index,
-            'slot': slot
-        }
-
-        for i, val in enumerate(data):
-            self.index.insert_entry(i, val, rid)
-
-        return True
+  
+      pr = self.page_ranges[pr_index]
+  
+      # find which base page has space and get the slot
+      while pr.current_base_page_index < pr.num_base_pages:
+          bp = pr.base_pages[pr.current_base_page_index]
+          if bp.has_capacity():
+              break
+          pr.current_base_page_index += 1
+  
+      if pr.current_base_page_index >= pr.num_base_pages:
+          return False
+  
+      bp_index = pr.current_base_page_index
+      slot = pr.base_pages[bp_index].num_records
+      pr.base_pages[bp_index].num_records += 1
+  
+      # write every column through bufferpool so disk sees it
+      for col_index, value in enumerate(full_data):
+          page_id = self._page_id(pr_index, 'base', col_index, bp_index)
+          page = self.bufferpool.get_page(page_id)
+          page.write(value)
+          self.bufferpool.mark_dirty(page_id)
+          self.bufferpool.unpin(page_id)
+  
+      self.page_directory[rid] = {
+          'is_base': True,
+          'page_range': pr_index,
+          'page_index': bp_index,
+          'slot': slot
+      }
+  
+      for i, val in enumerate(data):
+          self.index.insert_entry(i, val, rid)
+  
+      return True
 
     def update(self, primary_key, data):
-        rids = self.index.locate(self.key, primary_key)
-        if not rids:
-            return False
-
-        base_rid = rids[0]
-        base_loc = self.page_directory[base_rid]
-        prev_indirection = self._read_base_col(base_loc, INDIRECTION_COLUMN)
-
-        # get current values to fill in None columns (cumulative update)
-        old_data = self._get_latest_values(base_rid)
-
-        schema_encoding = 0
-        new_data = list(data)
-        for i, val in enumerate(new_data):
-            if val is None:
-                new_data[i] = old_data[i]
-            else:
-                schema_encoding |= (1 << (self.num_columns - i - 1))
-
-        tail_rid = self._new_tail_rid()
-        pr_index = base_loc['page_range']
-        pr = self.page_ranges[pr_index]
-
-        # new - tail metadata includes base_rid so merge knows which base record this belongs to
-        tail_meta = [prev_indirection, tail_rid, int(time()), schema_encoding, base_rid]
-        tp_index, slot = pr.append_tail(*(tail_meta + new_data))
-
-        # new - mark all tail page columns dirty
-        for col_index in range(TAIL_METADATA_COLUMNS + self.num_columns):
-            page_id = self._page_id(pr_index, 'tail', col_index, tp_index)
-            page = self.bufferpool.get_page(page_id)
-            self.bufferpool.mark_dirty(page_id)
-            self.bufferpool.unpin(page_id)
-
-        self.page_directory[tail_rid] = {
-            'is_base': False,
-            'page_range': pr_index,
-            'page_index': tp_index,
-            'slot': slot
-        }
-
-        # point base record indirection to this new tail record
-        self._write_base_col(base_loc, INDIRECTION_COLUMN, tail_rid)
-
-        # update secondary indexes for changed columns
-        for i, val in enumerate(data):
-            if val is not None and self.index.indices[i] is not None:
-                self.index.update_entry(i, old_data[i], val, base_rid)
-
-        # new - kick off background merge after enough updates
-        self.update_count += 1
-        if self.update_count >= self.MERGE_THRESHOLD:
-            self.update_count = 0
-            threading.Thread(target=self.__merge, daemon=True).start()
-
-        return True
+      rids = self.index.locate(self.key, primary_key)
+      if not rids:
+          return False
+  
+      base_rid = rids[0]
+      base_loc = self.page_directory[base_rid]
+      prev_indirection = self._read_base_col(base_loc, INDIRECTION_COLUMN)
+      old_data = self._get_latest_values(base_rid)
+  
+      schema_encoding = 0
+      new_data = list(data)
+      for i, val in enumerate(new_data):
+          if val is None:
+              new_data[i] = old_data[i]
+          else:
+              schema_encoding |= (1 << (self.num_columns - i - 1))
+  
+      tail_rid = self._new_tail_rid()
+      pr_index = base_loc['page_range']
+      pr = self.page_ranges[pr_index]
+      tail_meta = [prev_indirection, tail_rid, int(time()), schema_encoding, base_rid]
+      full_tail_data = tail_meta + new_data
+  
+      # find which tail page has space and get the slot
+      tail_page = pr.tail_pages[-1]
+      if not tail_page.has_capacity():
+          tail_page = Tail_Page(self.num_columns)
+          pr.tail_pages.append(tail_page)
+  
+      tp_index = len(pr.tail_pages) - 1
+      slot = tail_page.num_records
+      tail_page.num_records += 1
+  
+      # write every column through bufferpool
+      for col_index, value in enumerate(full_tail_data):
+          page_id = self._page_id(pr_index, 'tail', col_index, tp_index)
+          page = self.bufferpool.get_page(page_id)
+          page.write(value)
+          self.bufferpool.mark_dirty(page_id)
+          self.bufferpool.unpin(page_id)
+  
+      self.page_directory[tail_rid] = {
+          'is_base': False,
+          'page_range': pr_index,
+          'page_index': tp_index,
+          'slot': slot
+      }
+  
+      self._write_base_col(base_loc, INDIRECTION_COLUMN, tail_rid)
+  
+      for i, val in enumerate(data):
+          if val is not None and self.index.indices[i] is not None:
+              self.index.update_entry(i, old_data[i], val, base_rid)
+  
+      self.update_count += 1
+      if self.update_count >= self.MERGE_THRESHOLD:
+          self.update_count = 0
+          threading.Thread(target=self.__merge, daemon=True).start()
+  
+      return True
 
     def _get_latest_values(self, base_rid):
         base_loc = self.page_directory[base_rid]
