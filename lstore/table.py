@@ -214,7 +214,7 @@ class Table:
         indirection = self._read_base_col(base_loc, INDIRECTION_COLUMN)
         if indirection == 0:
             #straight from base col, never read
-            return [self._read_base_col(base_loc, METADATA_COLUMNS + i) for i in range(self.num_columns)]
+            return [self._read_base_col(base_loc, BASE_METADATA_COLUMNS + i) for i in range(self.num_columns)]
         else:
             tail_loc = self.page_directory[indirection]
             return [self._read_tail_col(tail_loc, TAIL_METADATA_COLUMNS + i) for i in range(self.num_columns)]
@@ -237,7 +237,7 @@ class Table:
         if indirection == 0 or already_merged:
             for i in range(self.num_columns):
                 if projected_columns[i]:
-                    values[i] = self._read_base_col(base_loc, METADATA_COLUMNS + i)
+                    values[i] = self._read_base_col(base_loc, BASE_METADATA_COLUMNS + i)
         else:
             tail_loc = self.page_directory[indirection]
             for i in range(self.num_columns):
@@ -256,7 +256,7 @@ class Table:
         if indirection == 0:
             for i in range(self.num_columns):
                 if projected_columns[i]:
-                    values[i] = self._read_base_col(base_loc, METADATA_COLUMNS + i)
+                    values[i] = self._read_base_col(base_loc, BASE_METADATA_COLUMNS + i)
             return Record(base_rid, values[self.key], values)
 
         #latest
@@ -287,7 +287,7 @@ class Table:
         if current_rid is None:
             for i in range(self.num_columns):
                 if projected_columns[i]:
-                    values[i] = self._read_base_col(base_loc, METADATA_COLUMNS + i)
+                    values[i] = self._read_base_col(base_loc, BASE_METADATA_COLUMNS + i)
         else:
             tail_loc = self.page_directory[current_rid]
             for i in range(self.num_columns):
@@ -333,7 +333,7 @@ class Table:
                         base_slot = base_loc['slot']
                         for col in range(self.num_columns):
                             val = tp.read(slot, TAIL_METADATA_COLUMNS + col)
-                            new_base_pages[bp_i].overwrite(base_slot, METADATA_COLUMNS + col, val)
+                            new_base_pages[bp_i].overwrite(base_slot, BASE_METADATA_COLUMNS + col, val)
 
                 #merged pages through bufferpool
                 for bp_i, new_bp in enumerate(new_base_pages):
@@ -353,7 +353,7 @@ class Table:
                 if last_tail_rid is not None:
                     for bp_i in range(len(pr.base_pages)):
                         pr.set_tps(bp_i, last_tail_rid)
-                        for col_index in range(METADATA_COLUMNS + self.num_columns):
+                        for col_index in range(BASE_METADATA_COLUMNS + self.num_columns):
                             page_id = self._page_id(pr_index, 'base', col_index, bp_i)
                             self.disk.write_tps(page_id, last_tail_rid)
 
@@ -409,11 +409,20 @@ class Table:
         #rebuild index
         self._rebuild_indexes()
 
+    #def _rebuild_indexes(self):
+        #for rid, loc in self.page_directory.items():
+            #if not loc['is_base']:
+                #continue
+            #for i in range(self.num_columns):
+                #if self.index.indices[i] is not None:
+                    #val = self._read_base_col(loc, BASE_METADATA_COLUMNS + i)
+                    #self.index.insert_entry(i, val, rid)
+
     def _rebuild_indexes(self):
         for rid, loc in self.page_directory.items():
             if not loc['is_base']:
                 continue
+            latest = self._get_latest_values(rid)
             for i in range(self.num_columns):
                 if self.index.indices[i] is not None:
-                    val = self._read_base_col(loc, METADATA_COLUMNS + i)
-                    self.index.insert_entry(i, val, rid)
+                    self.index.insert_entry(i, latest[i], rid)
