@@ -87,27 +87,37 @@ class Table:
         if len(data) != self.num_columns:
             return False
 
+        #no dupe primary keys
         if self.index.locate(self.key, data[self.key]):
             return False
 
         rid = self._new_base_rid()
-        # indirection = 0 means never updated
+        #0 = no updated records
         metadata = [0, rid, int(time()), 0]
 
+        #page range or open new one if full
         pr_index = len(self.page_ranges) - 1
         if self.page_ranges[pr_index].base_is_full():
             self._add_page_range()
             pr_index += 1
 
         pr = self.page_ranges[pr_index]
-        result = pr.write_base(*(metadata + data))
-        if result is None:
+
+        #get base page w space
+        while pr.current_base_page_index < pr.num_base_pages:
+            if pr.base_pages[pr.current_base_page_index].has_capacity():
+                break
+            pr.current_base_page_index += 1
+
+        if pr.current_base_page_index >= pr.num_base_pages:
             return False
 
-        bp_index, slot = result
+        bp_index = pr.current_base_page_index
+        slot = pr.base_pages[bp_index].num_records
+        pr.base_pages[bp_index].num_records += 1
 
-        # new - mark all base page columns dirty so bufferpool flushes them
-        for col_index in range(METADATA_COLUMNS + self.num_columns):
+        #col updates thro bufferpool
+        for col_index in range(BASE_METADATA_COLUMNS + self.num_columns):
             page_id = self._page_id(pr_index, 'base', col_index, bp_index)
             page = self.bufferpool.get_page(page_id)
             self.bufferpool.mark_dirty(page_id)
@@ -134,14 +144,13 @@ class Table:
         base_loc = self.page_directory[base_rid]
         prev_indirection = self._read_base_col(base_loc, INDIRECTION_COLUMN)
 
-        # get current values to fill in None columns (cumulative update)
+        #get latest vals and put in col not changing
         old_data = self._get_latest_values(base_rid)
 
         schema_encoding = 0
         new_data = list(data)
         for i, val in enumerate(new_data):
             if val is None:
-                # fill in unchanged columns with current value so tail record is cumulative
                 new_data[i] = old_data[i]
             else:
                 schema_encoding |= (1 << (self.num_columns - i - 1))
@@ -150,7 +159,6 @@ class Table:
         pr_index = base_loc['page_range']
         pr = self.page_ranges[pr_index]
 
-        # find which tail page has space, allocate slot from in-memory object only
         tail_page = pr.tail_pages[-1]
         if not tail_page.has_capacity():
             tail_page = Tail_Page(self.num_columns)
@@ -160,11 +168,10 @@ class Table:
         slot = tail_page.num_records
         tail_page.num_records += 1
 
-        # new - tail metadata includes base_rid so merge knows which base record this belongs to
         tail_meta = [prev_indirection, tail_rid, int(time()), schema_encoding, base_rid]
         full_tail_data = tail_meta + new_data
 
-        # write every column through bufferpool so data and disk stay in sync
+        #write every column through bufferpool so data and disk stay in sync
         for col_index, value in enumerate(full_tail_data):
             page_id = self._page_id(pr_index, 'tail', col_index, tp_index)
             page = self.bufferpool.get_page(page_id)
@@ -179,15 +186,14 @@ class Table:
             'slot': slot
         }
 
-        # point base record indirection to this new tail record
+        #point base indirection to this new tail record
         self._write_base_col(base_loc, INDIRECTION_COLUMN, tail_rid)
 
-        # update secondary indexes for changed columns
+        #2ndary index
         for i, val in enumerate(data):
             if val is not None and self.index.indices[i] is not None:
                 self.index.update_entry(i, old_data[i], val, base_rid)
 
-        # kick off background merge after enough updates
         self.update_count += 1
         if self.update_count >= self.MERGE_THRESHOLD:
             self.update_count = 0
@@ -199,10 +205,9 @@ class Table:
         base_loc = self.page_directory[base_rid]
         indirection = self._read_base_col(base_loc, INDIRECTION_COLUMN)
         if indirection == 0:
-            # never been updated, read straight from base columns
+            #straight from base col, never read
             return [self._read_base_col(base_loc, METADATA_COLUMNS + i) for i in range(self.num_columns)]
         else:
-            # has been updated - tail records are cumulative so latest tail has ALL column values
             tail_loc = self.page_directory[indirection]
             return [self._read_tail_col(tail_loc, TAIL_METADATA_COLUMNS + i) for i in range(self.num_columns)]
 
@@ -216,7 +221,7 @@ class Table:
         indirection = self._read_base_col(base_loc, INDIRECTION_COLUMN)
         values = [None] * self.num_columns
 
-        # new - use TPS to skip tail lookup if the update is already merged into base page
+        #TPS -> if updare already merged into base page
         pr = self.page_ranges[base_loc['page_range']]
         tps = pr.get_tps(base_loc['page_index'])
         already_merged = (indirection != 0) and (tps != 0) and (indirection >= tps)
@@ -240,14 +245,13 @@ class Table:
         indirection = self._read_base_col(base_loc, INDIRECTION_COLUMN)
         values = [None] * self.num_columns
 
-        # no updates, only base exists
         if indirection == 0:
             for i in range(self.num_columns):
                 if projected_columns[i]:
                     values[i] = self._read_base_col(base_loc, METADATA_COLUMNS + i)
             return Record(base_rid, values[self.key], values)
 
-        # latest version
+        #latest
         if relative_version >= 0:
             tail_loc = self.page_directory[indirection]
             for i in range(self.num_columns):
@@ -255,7 +259,7 @@ class Table:
                     values[i] = self._read_tail_col(tail_loc, TAIL_METADATA_COLUMNS + i)
             return Record(base_rid, values[self.key], values)
 
-        # walk backwards through tail chain for older versions
+        #backwards for older versions 
         steps = -relative_version
         current_rid = indirection
         for _ in range(steps):
@@ -284,8 +288,7 @@ class Table:
 
         return Record(base_rid, values[self.key], values)
 
-    # new - background merge: consolidates tail records into base pages
-    # runs in a background thread so normal queries keep going unblocked
+    #background merge into base pages
     def __merge(self):
         with self.merge_lock:
             for pr_index, pr in enumerate(self.page_ranges):
@@ -293,14 +296,14 @@ class Table:
                 if tail_snapshot == 0:
                     continue
 
-                # step 1: copy current base pages so we don't touch the live ones
+                #copy base pages
                 new_base_pages = [Base_Page(self.num_columns) for _ in pr.base_pages]
                 for bp_i, old_bp in enumerate(pr.base_pages):
                     for slot in range(old_bp.num_records):
                         row = [old_bp.read(slot, c) for c in range(old_bp.total_columns)]
                         new_base_pages[bp_i].write(*row)
 
-                # step 2: scan tail records newest first, apply only the latest per base record
+                #scan newest tail records first
                 seen = {}
                 last_tail_rid = None
                 for tp_i in range(tail_snapshot - 1, -1, -1):
@@ -324,7 +327,7 @@ class Table:
                             val = tp.read(slot, TAIL_METADATA_COLUMNS + col)
                             new_base_pages[bp_i].overwrite(base_slot, METADATA_COLUMNS + col, val)
 
-                # step 3: write merged pages through bufferpool
+                #merged pages through bufferpool
                 for bp_i, new_bp in enumerate(new_base_pages):
                     for col_index in range(new_bp.total_columns):
                         page_id = self._page_id(pr_index, 'base', col_index, bp_i)
@@ -335,10 +338,10 @@ class Table:
                         self.bufferpool.mark_dirty(page_id)
                         self.bufferpool.unpin(page_id)
 
-                # step 4: swap in the merged base pages
+                #swap in merged pages
                 pr.base_pages = new_base_pages
 
-                # step 5: update TPS so readers know these tail records are already in the base page
+                #update TPS
                 if last_tail_rid is not None:
                     for bp_i in range(len(pr.base_pages)):
                         pr.set_tps(bp_i, last_tail_rid)
@@ -346,7 +349,7 @@ class Table:
                             page_id = self._page_id(pr_index, 'base', col_index, bp_i)
                             self.disk.write_tps(page_id, last_tail_rid)
 
-    # new - flush all pages and write table metadata to disk for db.close()
+    #flush
     def save_to_disk(self, db_path):
         self.bufferpool.flush_all()
         meta = {
@@ -361,16 +364,17 @@ class Table:
         with open(os.path.join(db_path, self.name, 'meta.json'), 'w') as f:
             json.dump(meta, f)
 
-    # new - rebuild table structure from saved metadata for db.open()
-    # pages are lazy-loaded from disk by bufferpool on first access
     def load_from_disk(self, db_path):
         meta_path = os.path.join(db_path, self.name, 'meta.json')
         if not os.path.exists(meta_path):
             return
         with open(meta_path, 'r') as f:
             meta = json.load(f)
+          
         self.rid_counter = meta['rid_counter']
         self.tail_rid_counter = meta['tail_rid_counter']
+
+        #need to convert back to int bc its json? consulted the internet for this one... - pri
         self.page_directory = {int(k): v for k, v in meta['page_directory'].items()}
         self.page_ranges = []
         for base_counts, tail_counts, tps in zip(
@@ -394,7 +398,7 @@ class Table:
                 pr.tail_pages.append(tp)
             pr.tps = tps
             self.page_ranges.append(pr)
-        # rebuild indexes since we don't persist them
+        #rebuild index
         self._rebuild_indexes()
 
     def _rebuild_indexes(self):
