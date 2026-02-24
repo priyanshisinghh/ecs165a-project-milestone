@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from lstore.page import Page, PAGE_SIZE
 import os
 import json
@@ -17,16 +16,16 @@ class DiskManager:
 
     def __init__(self, db_path):
         self.db_path = db_path
-        os.makedirs(db_path, exist_ok = True)
+        os.makedirs(db_path, exist_ok=True)
 
-        #TPS metadata: page_id (as string) -> tps value
-        #loaded once at startup, flushed on every write_tps call.
+        # TPS metadata: table_name -> { page_id_string -> tps_value }
+        # loaded once at startup, flushed on every write_tps call.
         self.tps_cache = {}
-        self.tps_files = {}   #table_name -> file path
+        self.tps_files = {}  # table_name -> file path
 
-    #convert page id tuple to a file path
-    #page id: (table_name, page_range_id, page_type, column_index, page_index)
-    def get_page_file_path(self, page_id, create_dirs = False):
+    # convert page id tuple to a file path
+    # page id: (table_name, page_range_id, page_type, column_index, page_index)
+    def get_page_file_path(self, page_id, create_dirs=False):
         table_name, page_range_id, page_type, column_index, page_index = page_id
         range_dir = os.path.join(self.db_path, table_name, f"range_{page_range_id}")
 
@@ -36,9 +35,9 @@ class DiskManager:
         filename = f"{page_type}_col_{column_index}_page_{page_index}.dat"
         return os.path.join(range_dir, filename)
 
-    #returns bytes of exactly page size or none
+    # returns raw bytes of exactly PAGE_SIZE, or None if file doesn't exist
     def read_page(self, page_id):
-        file_path = self.get_page_file_path(page_id, create_dirs = False)
+        file_path = self.get_page_file_path(page_id, create_dirs=False)
 
         if not os.path.exists(file_path):
             return None
@@ -47,18 +46,19 @@ class DiskManager:
             page_data = f.read()
 
         if len(page_data) < PAGE_SIZE:
-            #partial/corrupt file, treat as missing so a fresh page is created
+            # partial or corrupt file, treat as missing so a fresh page is created
             return None
 
         return page_data[:PAGE_SIZE]
 
+    # writes exactly PAGE_SIZE bytes to disk
     def write_page(self, page_id, page_data):
         if len(page_data) != PAGE_SIZE:
             raise Exception(
                 f"Invalid page size when writing: got {len(page_data)}, expected {PAGE_SIZE}"
             )
 
-        file_path = self.get_page_file_path(page_id, create_dirs = True)
+        file_path = self.get_page_file_path(page_id, create_dirs=True)
 
         with open(file_path, 'wb') as f:
             f.write(page_data)
@@ -74,14 +74,16 @@ class DiskManager:
         if os.path.exists(table_dir):
             shutil.rmtree(table_dir)
 
-        #remove TPS metadata file
+        # remove TPS metadata file
         tps_path = self.tps_file_path(table_name)
         if os.path.exists(tps_path):
             os.remove(tps_path)
-        self._tps_cache.pop(table_name, None)
-        self._tps_files.pop(table_name, None)
 
-    def table_exists(self, table_name): 
+        # new - fixed attribute names (was _tps_cache and _tps_files with underscore, wrong name)
+        self.tps_cache.pop(table_name, None)
+        self.tps_files.pop(table_name, None)
+
+    def table_exists(self, table_name):
         return os.path.exists(os.path.join(self.db_path, table_name))
 
     # ------------------------------------------------------------------
@@ -97,7 +99,8 @@ class DiskManager:
         if table_name in self.tps_cache:
             return
 
-        path = self_tps_file_path(table_name)
+        # new - fixed typo: was self_tps_file_path (missing the dot)
+        path = self.tps_file_path(table_name)
         if os.path.exists(path):
             with open(path, 'r') as f:
                 raw = json.load(f)
@@ -105,11 +108,12 @@ class DiskManager:
         else:
             self.tps_cache[table_name] = {}
 
-    #persist a talbe's TPS map to disk 
+    # persist a table's TPS map to disk
     def save_tps_for_table(self, table_name):
         path = self.tps_file_path(table_name)
+        # new - fixed attribute name (was self._tps_cache, wrong name)
         with open(path, 'w') as f:
-            json.dump(self._tps_cache[table_name], f)
+            json.dump(self.tps_cache[table_name], f)
 
     def page_id_to_tps_key(self, page_id):
         return str(page_id)
@@ -120,7 +124,7 @@ class DiskManager:
         key = self.page_id_to_tps_key(page_id)
         return self.tps_cache[table_name].get(key, None)
 
-    #call whenever a dirty page is flushed to keep TPS sync
+    # call whenever a base page is merged so TPS survives a restart
     def write_tps(self, page_id, tps_value):
         table_name = page_id[0]
         self.load_tps_for_table(table_name)
