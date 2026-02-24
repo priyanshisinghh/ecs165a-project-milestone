@@ -127,12 +127,12 @@ class Bufferpool:
         if eviction_id is None:
             raise RuntimeError("Bufferpool full and all pages are pinned, cannot evict.")
             
-        eviction_frame = self.frames.pop(victim_id)
+        eviction_frame = self.frames.pop(eviction_id)
         if not eviction_frame.dirty:
             return
             
         try:
-            self.disk.write_page(victim_id, bytes(victim_frame.page.data))
+            self.disk.write_page(eviction_id, bytes(eviction_frame.page.data))
         except Exception as e:
-            self.frames[victim_id] = victim_frame
-            raise RuntimeError(f"Disk write failed during eviction for {victim_id}") from e
+            self.frames[eviction_id] = eviction_frame
+            raise RuntimeError(f"Disk write failed during eviction for {eviction_id}") from e
