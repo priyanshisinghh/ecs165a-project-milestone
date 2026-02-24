@@ -22,7 +22,7 @@ class Bufferpool:
 
         self.clock = 0
 
-        #checkpoint for dirty pages, make sure newly dirtied pages are not marked clean
+        # checkpoint for dirty pages, make sure newly dirtied pages are not marked clean
         self.dirty_clock = 0
 
     #records when a frame was last used

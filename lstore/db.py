@@ -1,47 +1,98 @@
+import pickle
 from lstore.table import Table
+from lstore.bufferpool import Bufferpool
+from lstore.disk import Disk
 
-#handles all the tables in the system 
-class Database():
 
+class Database:
     def __init__(self):
-        self.table_count = 0 
-        self.tables = []
-        pass
+        self.tables = {}
+        self.disk = None
+        self.path = None
 
-    #not needed for m1
+    # --------------------------------------------------
+    # OPEN / CLOSE (REQUIRED)
+    # --------------------------------------------------
+
     def open(self, path):
-        pass
+        self.path = path
+        self.disk = Disk(path)
+        try:
+            with open(path, "rb") as f:
+                state = pickle.load(f)
 
-    #not needed for m1
+            # restore disk
+            self.disk.pages = state["disk_pages"]
+
+            # restore tables
+            for meta in state["tables"]:
+                table = Table(
+                    meta["name"],
+                    meta["num_columns"],
+                    meta["key"]
+                )
+
+                # reattach bufferpool to shared disk
+                table.bufferpool = Bufferpool(
+                    capacity_pages=50,
+                    disk_manager=self.disk
+                )
+
+                # restore table internals
+                table.page_ranges = meta["page_ranges"]
+                table.page_directory = meta["page_directory"]
+                table.rid_num = meta["rid_num"]
+                table.index = meta["index"]
+
+                self.tables[table.name] = table
+
+        except FileNotFoundError:
+            # fresh database
+            pass
+
     def close(self):
-        pass
+        # flush all dirty pages first
+        for table in self.tables.values():
+            table.bufferpool.flush_all()
 
-    """
-    # Creates a new table
-    :param name: string         #Table name
-    :param num_columns: int     #Number of Columns: all columns are integer
-    :param key: int             #Index of table key in columns
-    """
+        # serialize DB state
+        state = {
+            "disk_pages": self.disk.pages,
+            "tables": []
+        }
+
+        for table in self.tables.values():
+            state["tables"].append({
+                "name": table.name,
+                "num_columns": table.num_columns,
+                "key": table.key,
+                "page_ranges": table.page_ranges,
+                "page_directory": table.page_directory,
+                "rid_num": table.rid_num,
+                "index": table.index
+            })
+
+        with open(self.path, "wb") as f:
+            pickle.dump(state, f)
+
+    # --------------------------------------------------
+    # TABLE MANAGEMENT
+    # --------------------------------------------------
+
     def create_table(self, name, num_columns, key_index):
+        if name in self.tables:
+            return self.tables[name]
+
         table = Table(name, num_columns, key_index)
-        self.tables.append(table)
-        self.table_count += 1
+        table.bufferpool = Bufferpool(50, self.disk)
+
+        self.tables[name] = table
         return table
 
-    
-    """
-    # Deletes the specified table
-    """
     def drop_table(self, name):
-        for table in self.tables:
-            if table.name == name:
-                del self.tables[table]
+        if name in self.tables:
+            self.tables[name].bufferpool.flush_all()
+            del self.tables[name]
 
-    
-    """
-    # Returns table with the passed name
-    """
     def get_table(self, name):
-        for table in self.tables:
-            if table.name == name:
-                return table 
+        return self.tables.get(name)
