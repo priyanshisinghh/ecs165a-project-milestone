@@ -29,19 +29,17 @@ class Table:
         self.key = key
         self.num_columns = num_columns
         self.disk = disk
-        # new - bufferpool wired to disk, holds 200 pages in memory at once
+        #200 pages in bufferpool disk
         self.bufferpool = Bufferpool(200, disk)
-        # new - list of Page_Range objects, grows as table fills up
         self.page_ranges = []
-        # page_directory: RID -> { 'is_base', 'page_range', 'page_index', 'slot' }
+        #rid to is_base, page range, page index, slot
         self.page_directory = {}
         self.index = Index(self)
-        # new - base RIDs count up from 0, tail RIDs count down from -1 so they never collide
+        #avoids collisions
         self.rid_counter = 0
         self.tail_rid_counter = -1
-        # new - merge fires in a background thread after this many updates
         self.update_count = 0
-        self.MERGE_THRESHOLD = 200
+        self.MERGE_THRESHOLD = 200 #merge at 200 updates
         self.merge_lock = threading.Lock()
         self._add_page_range()
 
@@ -57,12 +55,11 @@ class Table:
         rid = self.tail_rid_counter
         self.tail_rid_counter -= 1
         return rid
-
-    # new - 5-tuple page_id that both bufferpool and disk understand
+      
     def _page_id(self, pr_index, page_type, col_index, page_index):
         return (self.name, pr_index, page_type, col_index, page_index)
 
-    # new - read one value from a base page column through bufferpool
+    #read one value from a base page column through bufferpool
     def _read_base_col(self, location, col_index):
         page_id = self._page_id(location['page_range'], 'base', col_index, location['page_index'])
         page = self.bufferpool.get_page(page_id)
@@ -70,7 +67,7 @@ class Table:
         self.bufferpool.unpin(page_id)
         return val
 
-    # new - overwrite one value in a base page column through bufferpool
+    #write one value in a base page column through bufferpool
     def _write_base_col(self, location, col_index, value):
         page_id = self._page_id(location['page_range'], 'base', col_index, location['page_index'])
         page = self.bufferpool.get_page(page_id)
@@ -78,7 +75,7 @@ class Table:
         self.bufferpool.mark_dirty(page_id)
         self.bufferpool.unpin(page_id)
 
-    # new - read one value from a tail page column through bufferpool
+    #read one value from a tail page column through bufferpool
     def _read_tail_col(self, location, col_index):
         page_id = self._page_id(location['page_range'], 'tail', col_index, location['page_index'])
         page = self.bufferpool.get_page(page_id)
