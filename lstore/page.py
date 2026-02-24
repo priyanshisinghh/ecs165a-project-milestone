@@ -4,6 +4,12 @@ INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
+# new - extra column on tail records that stores which base record this tail belongs to
+# this is how the merge knows where to apply each tail update
+BASE_RID_COLUMN = 4
+# new - tail pages have one extra metadata column compared to base pages
+TAIL_METADATA_COLUMNS = 5
+
 PAGE_SIZE = 4096
 VALUES_PER_PAGE = PAGE_SIZE // VALUE_SIZE  # 512 records per page
 MAX_RECORDS_PER_BASE_PAGE = VALUES_PER_PAGE  # 512
@@ -45,7 +51,7 @@ class Base_Page:
         self.num_records = 0
         self.num_columns = num_columns
         self.total_columns = METADATA_COLUMNS + num_columns
-        # One Page object per column
+        # one Page object per column
         self.columns = [Page() for _ in range(self.total_columns)]
 
     def has_capacity(self):
@@ -77,12 +83,15 @@ class Tail_Page:
     """
     Append-only, holds one page per column (metadata + data).
     Each Tail_Page holds up to VALUES_PER_PAGE (512) records.
+    new - total_columns uses TAIL_METADATA_COLUMNS (5) instead of METADATA_COLUMNS (4)
+          because tail records also store the base_rid they belong to
     """
     def __init__(self, num_columns):
         self.num_records = 0
         self.num_columns = num_columns
-        self.total_columns = METADATA_COLUMNS + num_columns
-        # One Page object per column
+        # new - tail pages have 5 metadata columns (base + base_rid column)
+        self.total_columns = TAIL_METADATA_COLUMNS + num_columns
+        # one Page object per column
         self.columns = [Page() for _ in range(self.total_columns)]
 
     def has_capacity(self):
@@ -120,17 +129,18 @@ class Page_Range:
         self.num_columns = num_columns
         self.num_base_pages = num_base_pages
 
-        # Pre-allocate base pages for this range
+        # pre-allocate base pages for this range
         self.base_pages = [Base_Page(num_columns) for _ in range(num_base_pages)]
 
-        # Tail pages grow dynamically; start with one
+        # tail pages grow dynamically; start with one
         self.tail_pages = [Tail_Page(num_columns)]
 
-        # Track which base page is currently being written to
+        # track which base page is currently being written to
         self.current_base_page_index = 0
 
-        # TPS: Tail Page Sequence Number — tracks last merged tail RID per base page
-        # Initially 0 (no tail records merged yet)
+        # TPS: Tail Page Sequence Number
+        # tracks the RID of the last tail record merged into each base page
+        # starts at 0 meaning nothing has been merged yet
         self.tps = [0] * num_base_pages
 
     # -------------------------
@@ -143,7 +153,6 @@ class Page_Range:
         Moves to next base page if current is full.
         Returns (base_page_index, slot) or None if range is full.
         """
-        # Advance to the next non-full base page
         while self.current_base_page_index < self.num_base_pages:
             bp = self.base_pages[self.current_base_page_index]
             if bp.has_capacity():
@@ -151,7 +160,7 @@ class Page_Range:
                 return (self.current_base_page_index, slot)
             self.current_base_page_index += 1
 
-        return None  # Page range is full
+        return None  # page range is full
 
     def read_base(self, base_page_index, slot, column_index):
         """Read a value from a specific base page slot and column."""
