@@ -117,9 +117,17 @@ class Table:
         pr.base_pages[bp_index].num_records += 1
 
         #col updates thro bufferpool
-        for col_index in range(BASE_METADATA_COLUMNS + self.num_columns):
+        #for col_index in range(BASE_METADATA_COLUMNS + self.num_columns):
+           # page_id = self._page_id(pr_index, 'base', col_index, bp_index)
+            #page = self.bufferpool.get_page(page_id)
+            #self.bufferpool.mark_dirty(page_id)
+            #self.bufferpool.unpin(page_id)
+
+        all_values = [0, rid, int(time()), 0] + list(data)
+        for col_index, value in enumerate(all_values):
             page_id = self._page_id(pr_index, 'base', col_index, bp_index)
             page = self.bufferpool.get_page(page_id)
+            page.write(slot, value) 
             self.bufferpool.mark_dirty(page_id)
             self.bufferpool.unpin(page_id)
 
@@ -175,7 +183,7 @@ class Table:
         for col_index, value in enumerate(full_tail_data):
             page_id = self._page_id(pr_index, 'tail', col_index, tp_index)
             page = self.bufferpool.get_page(page_id)
-            page.write(value)
+            page.write(slot, value)
             self.bufferpool.mark_dirty(page_id)
             self.bufferpool.unpin(page_id)
 
