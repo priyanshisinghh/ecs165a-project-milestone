@@ -1,7 +1,7 @@
 from lstore.index import Index
 from time import time
 from lstore.page import (Base_Page, Tail_Page, Page_Range,
-                         METADATA_COLUMNS, TAIL_METADATA_COLUMNS, VALUE_SIZE,
+                         BASE_METADATA_COLUMNS, TAIL_METADATA_COLUMNS, VALUE_SIZE,
                          INDIRECTION_COLUMN, RID_COLUMN, TIMESTAMP_COLUMN,
                          SCHEMA_ENCODING_COLUMN, BASE_RID_COLUMN)
 from lstore.bufferpool import Bufferpool
