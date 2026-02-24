@@ -8,7 +8,9 @@ TAIL_METADATA_COLUMNS = 5
 BASE_METADATA_COLUMNS = 4 #base pages do not need the base rid column
 
 PAGE_SIZE = 4096
-VALUES_PER_PAGE = PAGE_SIZE // VALUE_SIZE  # 512 records per page
+HEADER_SIZE = VALUE_SIZE
+DATA_SIZE = PAGE_SIZE - HEADER_SIZE
+VALUES_PER_PAGE = DATA_SIZE // VALUE_SIZE  # 512 records per page
 MAX_RECORDS_PER_BASE_PAGE = VALUES_PER_PAGE
 
 
@@ -20,7 +22,7 @@ class Page:
         self.data = bytearray(self.size)
 
     def has_capacity(self):
-        return (VALUE_SIZE + self.ptr) <= self.size
+        return (VALUE_SIZE + self.ptr) <= DATA_SIZE
 
     def write(self, value):
         if value is None:
@@ -29,6 +31,7 @@ class Page:
             self.data[self.ptr: self.ptr + VALUE_SIZE] = (value).to_bytes(VALUE_SIZE, byteorder = "big", signed = True)
         self.num_records += 1
         self.ptr += VALUE_SIZE
+        self.data[DATA_SIZE: DATA_SIZE + VALUE_SIZE] = self.num_records.to_bytes(VALUE_SIZE, byteorder='big', signed=False)
 
     def overwrite(self, offset, value):
         start = int(offset * VALUE_SIZE)
