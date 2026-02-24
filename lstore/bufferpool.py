@@ -61,7 +61,7 @@ class Bufferpool:
         else:
             page = Page()
             page.data = bytearray(page_data)
-            page.ptr = self._find_ptr(page)
+            page.ptr = self.find_ptr(page)
             page.num_records = page.ptr // VALUE_SIZE
 
         frame = Frame(page = page, dirty = False, dirty_seq = 0, pin_count = 1, last_used = 0)
