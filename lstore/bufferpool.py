@@ -1,5 +1,5 @@
 from typing import Dict, Tuple
-from lstore.page import Page, PAGE_SIZE, VALUE_SIZE
+from lstore.page import Page, PAGE_SIZE, VALUE_SIZE, DATA_SIZE
 
 #page_id: (table_name, page_range_id, "base"/"tail", col_index, page_index)
 PageId = Tuple[str, int, str, int, int]
@@ -32,6 +32,7 @@ class Bufferpool:
         return self.dirty_clock
 
     #scan backwards to find where written data ends so ptr is correct after loading from disk
+    '''
     def find_ptr(self, page):
         ptr = PAGE_SIZE
         while ptr > 0:
@@ -40,6 +41,7 @@ class Bufferpool:
                 break
             ptr -= VALUE_SIZE
         return ptr
+    '''
 
     #pins and returns page, must be used with unpin
     def get_page(self, page_id):
@@ -61,8 +63,10 @@ class Bufferpool:
         else:
             page = Page()
             page.data = bytearray(page_data)
-            page.ptr = self.find_ptr(page)
-            page.num_records = page.ptr // VALUE_SIZE
+            page.num_records = int.from_bytes(page.data[DATA_SIZE: DATA_SIZE + VALUE_SIZE], byteorder='big', signed=False)
+            page.ptr = page.num_records * VALUE_SIZE
+            #page.ptr = self.find_ptr(page)
+            #page.num_records = page.ptr // VALUE_SIZE
 
         frame = Frame(page = page, dirty = False, dirty_seq = 0, pin_count = 1, last_used = 0)
         self.tick(frame)
