@@ -127,7 +127,7 @@ class Table:
         for col_index, value in enumerate(all_values):
             page_id = self._page_id(pr_index, 'base', col_index, bp_index)
             page = self.bufferpool.get_page(page_id)
-            page.write(slot, value) 
+            page.write(value) 
             self.bufferpool.mark_dirty(page_id)
             self.bufferpool.unpin(page_id)
 
