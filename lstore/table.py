@@ -158,6 +158,8 @@ class Table:
 
         schema_encoding = 0
         new_data = list(data)
+        if new_data[self.key] != primary_key and new_data[self.key] != None:
+            return False
         for i, val in enumerate(new_data):
             if val is None:
                 new_data[i] = old_data[i]
