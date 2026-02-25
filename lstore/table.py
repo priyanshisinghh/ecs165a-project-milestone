@@ -38,7 +38,7 @@ class Table:
         self.rid_counter = 0
         self.tail_rid_counter = -1
         self.update_count = 0
-        self.MERGE_THRESHOLD = 10000 #merge at 200 updates
+        self.MERGE_THRESHOLD = 10000 #merge at 10000 updates
         self._add_page_range()
 
     def _add_page_range(self):
