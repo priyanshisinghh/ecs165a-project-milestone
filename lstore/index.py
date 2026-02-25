@@ -25,11 +25,12 @@ class Index:
 
         index = self.indices[column]
         if index is None:
+            print("No index")
             return []
 
         if value in index.keys():
             return list(index.get(value, []))
-            
+        
         return []
 
     """
@@ -96,6 +97,8 @@ class Index:
 
         index = self.indices[column]
         if index is None:
+            if column == self.table.key:
+                print("primary key index not appearing")
             return False
         
         if column == self.table.key:
