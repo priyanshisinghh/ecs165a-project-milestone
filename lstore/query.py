@@ -2,8 +2,7 @@ from lstore.table import Record
 
 METADATA_COLUMNS = 4
 INDIRECTION_COLUMN = 0
-BASE_RID_COLUMN = 4
-TAIL_METADATA_COLUMNS = 5
+
 
 
 class Query:
@@ -18,7 +17,7 @@ class Query:
         return pr.read_base(bp_idx, slot, METADATA_COLUMNS + col)
 
     def _read_tail(self, pr, tp_idx, slot, col):
-        return pr.read_tail(tp_idx, slot, TAIL_METADATA_COLUMNS + col)
+        return pr.read_tail(tp_idx, slot, METADATA_COLUMNS + col)
 
     def _latest_values(self, base_rid, projected):
         is_base, pr_idx, bp_idx, slot = self.table.page_directory[base_rid]
@@ -44,7 +43,7 @@ class Query:
 
         return values
 
-# somewhere here there is an error
+    # somewhere here there is an error
     def _versioned_values(self, base_rid, projected, relative_version):
         is_base, pr_idx, bp_idx, slot = self.table.page_directory[base_rid]
         pr = self.table.page_ranges[pr_idx]
@@ -53,13 +52,20 @@ class Query:
         tail_rid = pr.read_base(bp_idx, slot, INDIRECTION_COLUMN)
 
         # no updates
-        if tail_rid == -1 or relative_version == 0:
+        if tail_rid == -1:
             for i in range(self.table.num_columns):
                 if projected[i]:
                     values[i] = self._read_base(pr, bp_idx, slot, i)
             return values
 
-        # walk tail chain
+        if relative_version == 0:
+            _, t_pr, t_pg, t_slot = self.table.page_directory[tail_rid]
+            tpr = self.table.page_ranges[t_pr]
+            for i in range(self.table.num_columns):
+                if projected[i]:
+                    values[i] = self._read_tail(tpr, t_pg, t_slot, i)
+            return values
+
         current = tail_rid
         steps = -relative_version
 
@@ -68,7 +74,10 @@ class Query:
             tpr = self.table.page_ranges[t_pr]
             prev = tpr.read_tail(t_pg, t_slot, INDIRECTION_COLUMN)
             if prev == -1:
-                break
+                for i in range(self.table.num_columns):
+                    if projected[i]:
+                        values[i] = self._read_base(pr, bp_idx, slot, i)
+                return values
             current = prev
 
         _, t_pr, t_pg, t_slot = self.table.page_directory[current]
@@ -149,8 +158,9 @@ class Query:
         return total
 
     def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
-        if relative_version <= 0:
+        if relative_version >= 0:
             return self.sum(start_range, end_range, aggregate_column_index)
+
         rids = self.table.index.locate_range(self.table.key, start_range, end_range)
         if not rids:
             return False
