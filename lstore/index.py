@@ -110,7 +110,8 @@ class Index:
         return True
 
     """
-    # remove_entry -> removing RID to ind for col value, mainly using for update entry
+    #remove_entry -> removing RID to ind for col value
+    #not meant deleting a whole value - RID pair
     """
     def remove_entry(self, column, key, RID):
         if column >= self.columns or column < 0:
@@ -133,6 +134,7 @@ class Index:
 
     """
     Removing key and RIDs from index
+    not super necessary, only needed in niche cases
     """
     def remove_key(self, column, key):
         if column >= self.columns or column < 0:
@@ -150,6 +152,10 @@ class Index:
 
         index.pop(key)
         return True
+
+    """
+    # combines remove and insert
+    """
 
     def update_entry(self, column, old_value, new_value, RID):
         if column >= self.columns or column < 0:
