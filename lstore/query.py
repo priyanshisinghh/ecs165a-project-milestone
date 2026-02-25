@@ -28,21 +28,18 @@ class Query:
     def delete(self, primary_key):
         rIDs = self.table.index.locate(self.table.key, primary_key)
         if not rIDs:
-            #print("query: delete")
             return False
 
         base_rid = rIDs[0]
-        base_loc = self.table.page_directory[base_rid]
+        #base_loc = self.table.page_directory[base_rid]
 
         #update record to have special values so the record shows as deleted
-        invalidated_record = [None] * self.table.num_columns
-        self.table.update(primary_key, invalidated_record)
+        #invalidated_record = [None] * self.table.num_columns
+        #self.table.update(primary_key, invalidated_record)
+        self.table.index.indices[self.table.key].pop(primary_key, None)
 
         #remove from all active indexes
-        for i in range(self.table.num_columns):
-            val = self.table._read_base_col(base_loc, BASE_METADATA_COLUMNS + i)
-            if self.table.index.indices[i] is not None:
-                self.table.index.remove_entry(i, val, base_rid)
+        del self.table.page_directory[base_rid]
 
         return True
 
