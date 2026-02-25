@@ -5,7 +5,6 @@ from lstore.page import (Base_Page, Tail_Page, Page_Range,
                          INDIRECTION_COLUMN, RID_COLUMN, TIMESTAMP_COLUMN,
                          SCHEMA_ENCODING_COLUMN, BASE_RID_COLUMN)
 from lstore.bufferpool import Bufferpool
-import threading
 import os
 import json
 
@@ -30,7 +29,7 @@ class Table:
         self.num_columns = num_columns
         self.disk = disk
         #200 pages in bufferpool disk
-        self.bufferpool = Bufferpool(200, disk)
+        self.bufferpool = Bufferpool(32, disk)
         self.page_ranges = []
         #rid to is_base, page range, page index, slot
         self.page_directory = {}
@@ -39,8 +38,7 @@ class Table:
         self.rid_counter = 0
         self.tail_rid_counter = -1
         self.update_count = 0
-        self.MERGE_THRESHOLD = 200 #merge at 200 updates
-        self.merge_lock = threading.Lock()
+        self.MERGE_THRESHOLD = 10000 #merge at 200 updates
         self._add_page_range()
 
     def _add_page_range(self):
@@ -203,9 +201,6 @@ class Table:
                 self.index.update_entry(i, old_data[i], val, base_rid)
 
         self.update_count += 1
-        if self.update_count >= self.MERGE_THRESHOLD:
-            self.update_count = 0
-            threading.Thread(target=self.__merge, daemon=True).start()
 
         return True
 
