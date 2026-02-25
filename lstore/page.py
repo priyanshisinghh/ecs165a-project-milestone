@@ -4,10 +4,6 @@ INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
-# new - extra column stored on every tail record so merge knows which base record it belongs to
-BASE_RID_COLUMN = 4
-# new - tail pages have 5 metadata columns (4 standard + base_rid)
-TAIL_METADATA_COLUMNS = 5
 
 PAGE_SIZE = 4096
 VALUES_PER_PAGE = PAGE_SIZE // VALUE_SIZE  # 512 records per page
@@ -26,9 +22,10 @@ class Page:
 
     def write(self, value):
         if value is None:
-            self.data[self.ptr: self.ptr + VALUE_SIZE] = (0).to_bytes(VALUE_SIZE, byteorder='big', signed=True)
-        else:
-            self.data[self.ptr:self.ptr + VALUE_SIZE] = (value).to_bytes(VALUE_SIZE, byteorder="big", signed=True)
+            value = 0
+        self.data[self.ptr:self.ptr + VALUE_SIZE] = int(value).to_bytes(
+            VALUE_SIZE, byteorder="big", signed=True
+        )
         self.num_records += 1
         self.ptr += VALUE_SIZE
 
@@ -66,11 +63,11 @@ class Base_Page:
         self.columns[column_index].overwrite(slot, value)
 
 class Tail_Page:
-    # new - total_columns uses TAIL_METADATA_COLUMNS (5) so base_rid is stored per tail record
     def __init__(self, num_columns):
         self.num_records = 0
         self.num_columns = num_columns
-        self.total_columns = TAIL_METADATA_COLUMNS + num_columns
+        # Milestone 1: tail pages match base pages
+        self.total_columns = METADATA_COLUMNS + num_columns
         self.columns = [Page() for _ in range(self.total_columns)]
 
     def has_capacity(self):
@@ -98,8 +95,6 @@ class Page_Range:
         self.base_pages = [Base_Page(num_columns) for _ in range(num_base_pages)]
         self.tail_pages = [Tail_Page(num_columns)]
         self.current_base_page_index = 0
-        # new - TPS per base page: tracks the last tail RID merged into each base page
-        self.tps = [0] * num_base_pages
 
     # -------------------------
     # BASE PAGE OPERATIONS
@@ -143,12 +138,3 @@ class Page_Range:
     def overwrite_tail(self, tail_page_index, slot, column_index, value):
         self.tail_pages[tail_page_index].overwrite(slot, column_index, value)
 
-    # -------------------------
-    # TPS
-    # -------------------------
-
-    def get_tps(self, base_page_index):
-        return self.tps[base_page_index]
-
-    def set_tps(self, base_page_index, tail_rid):
-        self.tps[base_page_index] = tail_rid
