@@ -119,7 +119,8 @@ class Table:
             #self.bufferpool.mark_dirty(page_id)
             #self.bufferpool.unpin(page_id)
 
-        all_values = [0, rid, int(time()), 0] + list(data)
+        all_values = meta + list(data)
+      
         for col_index, value in enumerate(all_values):
             page_id = self._page_id(pr_index, 'base', col_index, bp_index)
             page = self.bufferpool.get_page(page_id)
