@@ -103,7 +103,7 @@ class Index:
                 return False #cannot interfere w already existing primary key -> was throwing error before
             
         if index.get(key) is not None:
-            if RID is not in index[key]:
+            if RID not in index[key]:
                 index[key].append(RID)
             else:
                 return False
