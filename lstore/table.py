@@ -185,8 +185,7 @@ class Table:
             self.bufferpool.mark_dirty(page_id)
             self.bufferpool.unpin(page_id)
           
-        tail_page.num_records += 1
-
+      
         self.page_directory[tail_rid] = {
             'is_base': False,
             'page_range': pr_index,
@@ -293,10 +292,10 @@ class Table:
 
     #background merge into base pages
     def __merge(self):
-    for pr_index, pr in enumerate(self.page_ranges):
+      for pr_index, pr in enumerate(self.page_ranges):
         tail_snapshot = len(pr.tail_pages)
         if tail_snapshot == 0:
-            continue
+          continue
 
         # copy base pages
         new_base_pages = [Base_Page(self.num_columns) for _ in pr.base_pages]
@@ -403,16 +402,12 @@ class Table:
         #rebuild index
         self._rebuild_indexes()
 
-    #def _rebuild_indexes(self):
-        #for rid, loc in self.page_directory.items():
-            #if not loc['is_base']:
-                #continue
-            #for i in range(self.num_columns):
-                #if self.index.indices[i] is not None:
-                    #val = self._read_base_col(loc, BASE_METADATA_COLUMNS + i)
-                    #self.index.insert_entry(i, val, rid)
 
     def _rebuild_indexes(self):
-        for rid, loc in self.page_directory.items():
-            if not loc['is_base']:
-                continue
+      for rid, loc in self.page_directory.items():
+        if not loc['is_base']:
+          continue
+        for i in range(self.num_columns):
+          if self.index.indices[i] is not None:
+            val = self._read_base_col(loc, BASE_METADATA_COLUMNS + i)
+            self.index.insert_entry(i, val, rid)
