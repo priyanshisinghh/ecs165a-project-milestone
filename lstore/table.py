@@ -198,7 +198,7 @@ class Table:
         #2ndary index
         for i, val in enumerate(data):
             if val is not None and self.index.indices[i] is not None:
-                self.index.update_entry(i, new_data[i], val, base_rid)
+                self.index.update_entry(i, old_data[i], val, base_rid)
 
         self.update_count += 1
 
