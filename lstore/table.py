@@ -28,7 +28,7 @@ class Table:
         self.key = key
         self.num_columns = num_columns
         self.disk = disk
-        #200 pages in bufferpool disk
+        #32 pages in bufferpool disk
         self.bufferpool = Bufferpool(32, disk)
         self.page_ranges = []
         #rid to is_base, page range, page index, slot
