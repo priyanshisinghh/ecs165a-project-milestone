@@ -50,7 +50,7 @@ class Query:
     def select(self, search_key, search_key_index, projected_columns_index):
         rIDs = self.table.index.locate(search_key_index, search_key)
     
-        # if no index on this column, scan all base rids manually
+        #if no index on this column, scan all base rids manually
         if not rIDs and self.table.index.indices[search_key_index] is None:
             rIDs = [rid for rid, loc in self.table.page_directory.items() if loc['is_base']]
     
@@ -62,7 +62,7 @@ class Query:
             if not loc['is_base']:
                 continue
             record = self.table.read_record(rID, projected_columns_index)
-            # when scanning without index, filter manually since index didnt do it for us
+            #when scanning without index, filter manually since index didnt do it for us
             if record is not False and record.columns[search_key_index] == search_key:
                 records.append(record)
         return records
