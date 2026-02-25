@@ -9,8 +9,9 @@ class Index:
     def __init__(self, table):
         # One index for each table. All are empty initially.
         self.columns = table.num_columns
-        self.indices = [SortedDict()] * self.columns 
+        self.indices = [None] * self.columns 
         self.table = table
+        self.create_index(self.table.key)
 
     """
       returns the location of all records with the given value on column "column"
