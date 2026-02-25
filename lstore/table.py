@@ -112,7 +112,7 @@ class Table:
 
         bp_index = pr.current_base_page_index
         slot = pr.base_pages[bp_index].num_records
-        pr.base_pages[bp_index].num_records += 1
+        pr.base_pages[bp_index].num_records=slot+ 1
 
         #col updates thro bufferpool
         #for col_index in range(BASE_METADATA_COLUMNS + self.num_columns):
@@ -184,7 +184,7 @@ class Table:
             page.write(value)
             self.bufferpool.mark_dirty(page_id)
             self.bufferpool.unpin(page_id)
-          
+        tail_page.num_records=slot+1
       
         self.page_directory[tail_rid] = {
             'is_base': False,
