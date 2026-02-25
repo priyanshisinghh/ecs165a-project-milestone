@@ -137,6 +137,8 @@ class Table:
         }
 
         for i, val in enumerate(data):
+            if self.index.indicies[i] is None:
+                self.index.create_index(i)
             self.index.insert_entry(i, val, rid)
 
         return True
