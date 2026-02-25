@@ -46,11 +46,11 @@ class Query:
     def insert(self, *columns):
         return self.table.insert(list(columns))
 
-    #table takes care of reading record and record version, query just validates the RIDs
+    #quick searching the database or searching the entire database
     def select(self, search_key, search_key_index, projected_columns_index):
         rIDs = self.table.index.locate(search_key_index, search_key)
     
-        #if no index on this column, scan all base rids manually
+        #if no index on this column, scan all base rids manually and search entire database
         if not rIDs and self.table.index.indices[search_key_index] is None:
             rIDs = [rid for rid, loc in self.table.page_directory.items() if loc['is_base']]
     
