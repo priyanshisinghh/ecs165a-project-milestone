@@ -202,6 +202,9 @@ class Table:
 
         self.update_count += 1
 
+        if pr.len(tail_pages) > self.MERGE_THRESHOLD:
+            self.__merge()
+      
         return True
 
     def _get_latest_values(self, base_rid):
