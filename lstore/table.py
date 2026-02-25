@@ -180,7 +180,7 @@ class Table:
         for col_index, value in enumerate(full_tail_data):
             page_id = self._page_id(pr_index, 'tail', col_index, tp_index)
             page = self.bufferpool.get_page(page_id)
-            page.overwrite(slot, value)
+            page.write(slot, value)
             self.bufferpool.mark_dirty(page_id)
             self.bufferpool.unpin(page_id)
 
