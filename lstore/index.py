@@ -9,8 +9,7 @@ class Index:
     def __init__(self, table):
         # One index for each table. All are empty initially.
         self.columns = table.num_columns
-        self.indices = [None] * self.columns 
-        self.create_index(table.key)
+        self.indices = [SortedDict()] * self.columns 
         self.table = table
 
     """
