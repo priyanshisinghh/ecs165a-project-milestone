@@ -5,7 +5,6 @@ from lstore.page import (Base_Page, Tail_Page, Page_Range,
                          INDIRECTION_COLUMN, RID_COLUMN, TIMESTAMP_COLUMN,
                          SCHEMA_ENCODING_COLUMN, BASE_RID_COLUMN)
 from lstore.bufferpool import Bufferpool
-import threading
 import os
 import json
 
