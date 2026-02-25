@@ -28,7 +28,7 @@ class Query:
     def delete(self, primary_key):
         rIDs = self.table.index.locate(self.table.key, primary_key)
         if not rIDs:
-            print("query: delete")
+            #print("query: delete")
             return False
 
         base_rid = rIDs[0]
