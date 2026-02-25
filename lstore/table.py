@@ -38,7 +38,7 @@ class Table:
         self.rid_counter = 0
         self.tail_rid_counter = -1
         self.update_count = 0
-        self.MERGE_THRESHOLD = 10000 #merge at 200 updates
+        self.MERGE_THRESHOLD = 10 #merge at 200 updates
         self._add_page_range()
 
     def _add_page_range(self):
@@ -137,8 +137,6 @@ class Table:
         }
 
         for i, val in enumerate(data):
-            if self.index.indices[i] is None:
-                self.index.create_index[i]
             self.index.insert_entry(i, val, rid)
 
         return True
@@ -174,7 +172,7 @@ class Table:
 
         tp_index = len(pr.tail_pages) - 1
         slot = tail_page.num_records
-        tail_page.num_records += 1
+       
 
         tail_meta = [prev_indirection, tail_rid, int(time()), schema_encoding, base_rid]
         full_tail_data = tail_meta + new_data
@@ -183,9 +181,11 @@ class Table:
         for col_index, value in enumerate(full_tail_data):
             page_id = self._page_id(pr_index, 'tail', col_index, tp_index)
             page = self.bufferpool.get_page(page_id)
-            page.overwrite(slot, value)
+            page.write(value)
             self.bufferpool.mark_dirty(page_id)
             self.bufferpool.unpin(page_id)
+          
+        tail_page.num_records += 1
 
         self.page_directory[tail_rid] = {
             'is_base': False,
@@ -203,10 +203,9 @@ class Table:
                 self.index.update_entry(i, old_data[i], val, base_rid)
 
         self.update_count += 1
-
-        if pr.len(tail_pages) > self.MERGE_THRESHOLD:
-            self.__merge()
-      
+        if len(pr.tail_pages)>=self.MERGE_THRESHOLD:
+          self.__merge()
+        
         return True
 
     def _get_latest_values(self, base_rid):
@@ -232,7 +231,7 @@ class Table:
         #TPS -> if updare already merged into base page
         pr = self.page_ranges[base_loc['page_range']]
         tps = pr.get_tps(base_loc['page_index'])
-        already_merged = (indirection != 0) and (tps != 0) and (indirection >= tps)
+        already_merged = (indirection != 0) and (tps != 0) and (indirection <= tps)
 
         if indirection == 0 or already_merged:
             for i in range(self.num_columns):
@@ -261,11 +260,7 @@ class Table:
 
         #latest
         if relative_version >= 0:
-            tail_loc = self.page_directory[indirection]
-            for i in range(self.num_columns):
-                if projected_columns[i]:
-                    values[i] = self._read_tail_col(tail_loc, TAIL_METADATA_COLUMNS + i)
-            return Record(base_rid, values[self.key], values)
+          return self.read_record(base_rid, projected_columns)
 
         #backwards for older versions 
         steps = -relative_version
@@ -298,64 +293,63 @@ class Table:
 
     #background merge into base pages
     def __merge(self):
-        with self.merge_lock:
-            for pr_index, pr in enumerate(self.page_ranges):
-                tail_snapshot = len(pr.tail_pages)
-                if tail_snapshot == 0:
+    for pr_index, pr in enumerate(self.page_ranges):
+        tail_snapshot = len(pr.tail_pages)
+        if tail_snapshot == 0:
+            continue
+
+        # copy base pages
+        new_base_pages = [Base_Page(self.num_columns) for _ in pr.base_pages]
+        for bp_i, old_bp in enumerate(pr.base_pages):
+            for slot in range(old_bp.num_records):
+                row = [old_bp.read(slot, c) for c in range(old_bp.total_columns)]
+                new_base_pages[bp_i].write(*row)
+
+        # scan newest tail records first
+        seen = {}
+        last_tail_rid = None
+        for tp_i in range(tail_snapshot - 1, -1, -1):
+            tp = pr.tail_pages[tp_i]
+            for slot in range(tp.num_records - 1, -1, -1):
+                tail_rid = tp.read(slot, RID_COLUMN)
+                base_rid = tp.read(slot, BASE_RID_COLUMN)
+                if last_tail_rid is None:
+                    last_tail_rid = tail_rid
+                if base_rid in seen:
                     continue
+                seen[base_rid] = True
+                if base_rid not in self.page_directory:
+                    continue
+                base_loc = self.page_directory[base_rid]
+                if base_loc['page_range'] != pr_index:
+                    continue
+                bp_i = base_loc['page_index']
+                base_slot = base_loc['slot']
+                for col in range(self.num_columns):
+                    val = tp.read(slot, TAIL_METADATA_COLUMNS + col)
+                    new_base_pages[bp_i].overwrite(base_slot, BASE_METADATA_COLUMNS + col, val)
 
-                #copy base pages
-                new_base_pages = [Base_Page(self.num_columns) for _ in pr.base_pages]
-                for bp_i, old_bp in enumerate(pr.base_pages):
-                    for slot in range(old_bp.num_records):
-                        row = [old_bp.read(slot, c) for c in range(old_bp.total_columns)]
-                        new_base_pages[bp_i].write(*row)
+        # merged pages through bufferpool
+        for bp_i, new_bp in enumerate(new_base_pages):
+            for col_index in range(new_bp.total_columns):
+                page_id = self._page_id(pr_index, 'base', col_index, bp_i)
+                page = self.bufferpool.get_page(page_id)
+                page.data = bytearray(new_bp.columns[col_index].data)
+                page.ptr = new_bp.columns[col_index].ptr
+                page.num_records = new_bp.columns[col_index].num_records
+                self.bufferpool.mark_dirty(page_id)
+                self.bufferpool.unpin(page_id)
 
-                #scan newest tail records first
-                seen = {}
-                last_tail_rid = None
-                for tp_i in range(tail_snapshot - 1, -1, -1):
-                    tp = pr.tail_pages[tp_i]
-                    for slot in range(tp.num_records - 1, -1, -1):
-                        tail_rid = tp.read(slot, RID_COLUMN)
-                        base_rid = tp.read(slot, BASE_RID_COLUMN)
-                        if last_tail_rid is None:
-                            last_tail_rid = tail_rid
-                        if base_rid in seen:
-                            continue
-                        seen[base_rid] = True
-                        if base_rid not in self.page_directory:
-                            continue
-                        base_loc = self.page_directory[base_rid]
-                        if base_loc['page_range'] != pr_index:
-                            continue
-                        bp_i = base_loc['page_index']
-                        base_slot = base_loc['slot']
-                        for col in range(self.num_columns):
-                            val = tp.read(slot, TAIL_METADATA_COLUMNS + col)
-                            new_base_pages[bp_i].overwrite(base_slot, BASE_METADATA_COLUMNS + col, val)
+        # swap in merged pages
+        pr.base_pages = new_base_pages
 
-                #merged pages through bufferpool
-                for bp_i, new_bp in enumerate(new_base_pages):
-                    for col_index in range(new_bp.total_columns):
-                        page_id = self._page_id(pr_index, 'base', col_index, bp_i)
-                        page = self.bufferpool.get_page(page_id)
-                        page.data = bytearray(new_bp.columns[col_index].data)
-                        page.ptr = new_bp.columns[col_index].ptr
-                        page.num_records = new_bp.columns[col_index].num_records
-                        self.bufferpool.mark_dirty(page_id)
-                        self.bufferpool.unpin(page_id)
-
-                #swap in merged pages
-                pr.base_pages = new_base_pages
-
-                #update TPS
-                if last_tail_rid is not None:
-                    for bp_i in range(len(pr.base_pages)):
-                        pr.set_tps(bp_i, last_tail_rid)
-                        for col_index in range(BASE_METADATA_COLUMNS + self.num_columns):
-                            page_id = self._page_id(pr_index, 'base', col_index, bp_i)
-                            self.disk.write_tps(page_id, last_tail_rid)
+        # update TPS
+        if last_tail_rid is not None:
+            for bp_i in range(len(pr.base_pages)):
+                pr.set_tps(bp_i, last_tail_rid)
+                for col_index in range(BASE_METADATA_COLUMNS + self.num_columns):
+                    page_id = self._page_id(pr_index, 'base', col_index, bp_i)
+                    self.disk.write_tps(page_id, last_tail_rid)
 
     #flush
     def save_to_disk(self, db_path):
@@ -422,7 +416,3 @@ class Table:
         for rid, loc in self.page_directory.items():
             if not loc['is_base']:
                 continue
-            latest = self._get_latest_values(rid)
-            for i in range(self.num_columns):
-                if self.index.indices[i] is not None:
-                    self.index.insert_entry(i, latest[i], rid)
