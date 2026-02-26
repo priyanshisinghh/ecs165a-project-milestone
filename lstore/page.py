@@ -10,7 +10,7 @@ BASE_METADATA_COLUMNS = 4 #base pages do not need the base rid column
 PAGE_SIZE = 4096
 HEADER_SIZE = VALUE_SIZE
 DATA_SIZE = PAGE_SIZE - HEADER_SIZE
-VALUES_PER_PAGE = DATA_SIZE // VALUE_SIZE  # 512 records per page
+VALUES_PER_PAGE = DATA_SIZE // VALUE_SIZE  #512 records per page
 MAX_RECORDS_PER_BASE_PAGE = VALUES_PER_PAGE
 
 
@@ -24,6 +24,7 @@ class Page:
     def has_capacity(self):
         return (VALUE_SIZE + self.ptr) <= DATA_SIZE
 
+    #writes the page inn bytes
     def write(self, value):
         if value is None:
             self.data[self.ptr: self.ptr + VALUE_SIZE] = (0).to_bytes(VALUE_SIZE, byteorder = 'big', signed = True)
@@ -31,7 +32,7 @@ class Page:
             self.data[self.ptr: self.ptr + VALUE_SIZE] = (value).to_bytes(VALUE_SIZE, byteorder = "big", signed = True)
         self.num_records += 1
         self.ptr += VALUE_SIZE
-        self.data[DATA_SIZE: DATA_SIZE + VALUE_SIZE] = self.num_records.to_bytes(VALUE_SIZE, byteorder='big', signed=False)
+        self.data[DATA_SIZE: DATA_SIZE + VALUE_SIZE] = self.num_records.to_bytes(VALUE_SIZE, byteorder='big', signed = False)
 
     def overwrite(self, offset, value):
         start = int(offset * VALUE_SIZE)
@@ -52,6 +53,7 @@ class Base_Page:
     def has_capacity(self):
         return self.num_records < VALUES_PER_PAGE
 
+    #writes data to base page, keeps track of location
     def write(self, *data):
         if not self.has_capacity():
             return None
@@ -78,6 +80,7 @@ class Tail_Page:
     def has_capacity(self):
         return self.num_records < VALUES_PER_PAGE
 
+    #appends new data to tail page, keep track of location
     def append(self, *data):
         if not self.has_capacity():
             return None
@@ -93,7 +96,7 @@ class Tail_Page:
     def overwrite(self, slot, column_index, value):
         self.columns[column_index].overwrite(slot, value)
 
-
+#manages base and tail pages
 class Page_Range:
     def __init__(self, num_columns, num_base_pages=16):
         self.num_columns = num_columns
