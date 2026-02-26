@@ -188,8 +188,8 @@ class Table:
             self.__merge(pr_index)
             self.merged = True
             self.last_merged = tail_pages
-        #elif tail_pages != self.last_merged:
-        #    self.merged = False
+        elif tail_pages != self.last_merged:
+            self.merged = False
         return True
 
     def _get_latest_values(self, base_rid):
