@@ -37,6 +37,7 @@ class Table:
         self.last_merged = -1
         self._add_page_range()
 
+    #lots of helper functiomns
     def _add_page_range(self):
         self.page_ranges.append(Page_Range(self.num_columns))
 
@@ -53,6 +54,7 @@ class Table:
     def _page_id(self, pr_index, page_type, col_index, page_index):
         return (self.name, pr_index, page_type, col_index, page_index)
 
+    #read/write one column
     def _read_base_col(self, location, col_index):
         page_id = self._page_id(location['page_range'], 'base', col_index, location['page_index'])
         page = self.bufferpool.get_page(page_id)
@@ -83,6 +85,7 @@ class Table:
 
         rid = self._new_base_rid()
 
+        #check for full page range
         pr_index = len(self.page_ranges) - 1
         if self.page_ranges[pr_index].base_is_full():
             self._add_page_range()
@@ -90,6 +93,7 @@ class Table:
 
         pr = self.page_ranges[pr_index]
 
+        #check for closest available base page
         while pr.current_base_page_index < pr.num_base_pages:
             if pr.base_pages[pr.current_base_page_index].has_capacity():
                 break
@@ -102,6 +106,7 @@ class Table:
         slot = pr.base_pages[bp_index].num_records
         pr.base_pages[bp_index].num_records += 1
 
+        #add data to base page, to page directory, and to index
         all_values = [0, rid, int(time()), 0] + list(data)
         for col_index, value in enumerate(all_values):
             page_id = self._page_id(pr_index, 'base', col_index, bp_index)
@@ -134,6 +139,7 @@ class Table:
         prev_indirection = self._read_base_col(base_loc, INDIRECTION_COLUMN)
         old_data = self._get_latest_values(base_rid)
 
+        #create schema encoding and get all latest data (cumulative tail record design)
         schema_encoding = 0
         new_data = list(data)
         if new_data[self.key] is not None and new_data[self.key] != primary_key:
@@ -144,6 +150,7 @@ class Table:
             else:
                 schema_encoding |= (1 << (self.num_columns - i - 1))
 
+        #get location of tail page
         tail_rid = self._new_tail_rid()
         pr_index = base_loc['page_range']
         pr = self.page_ranges[pr_index]
@@ -160,6 +167,7 @@ class Table:
         tail_meta = [prev_indirection, tail_rid, int(time()), schema_encoding, base_rid]
         full_tail_data = tail_meta + new_data
 
+        #append data to tail page, page directory, and index
         for col_index, value in enumerate(full_tail_data):
             page_id = self._page_id(pr_index, 'tail', col_index, tp_index)
             page = self.bufferpool.get_page(page_id)
@@ -182,7 +190,7 @@ class Table:
 
         self.update_count += 1
 
-        # trigger merge when this page range hits the tail page threshold
+        #trigger merge when this page range hits the tail page threshold
         tail_pages = len(pr.tail_pages)
         if tail_pages % self.MERGE_THRESHOLD == 0 and tail_pages > self.last_merged and not self.merged:
             self.__merge(pr_index)
@@ -211,7 +219,6 @@ class Table:
         indirection = self._read_base_col(base_loc, INDIRECTION_COLUMN)
         values = [None] * self.num_columns
 
-        # tail RIDs are negative — if indirection >= tps, it was written after last merge
         pr = self.page_ranges[base_loc['page_range']]
         tps = pr.get_tps(base_loc['page_index'])
         already_merged = (indirection != 0) and (tps != 0) and (indirection >= tps)
@@ -220,7 +227,7 @@ class Table:
             for i in range(self.num_columns):
                 if projected_columns[i]:
                     values[i] = self._read_base_col(base_loc, BASE_METADATA_COLUMNS + i)
-        else:
+        else: #go down indirection column list
             tail_loc = self.page_directory[indirection]
             for i in range(self.num_columns):
                 if projected_columns[i]:
@@ -235,6 +242,7 @@ class Table:
         indirection = self._read_base_col(base_loc, INDIRECTION_COLUMN)
         values = [None] * self.num_columns
 
+        #if there are no updates, stop here
         if indirection == 0:
             for i in range(self.num_columns):
                 if projected_columns[i]:
@@ -244,7 +252,7 @@ class Table:
         if relative_version >= 0:
             return self.read_record(base_rid, projected_columns)
 
-        # walk backwards through tail chain
+        #walk backwards through tail chain
         steps = -relative_version
         current_rid = indirection
         for _ in range(steps):
@@ -256,7 +264,7 @@ class Table:
                 current_rid = None
                 break
             prev = self._read_tail_col(loc, INDIRECTION_COLUMN)
-            if prev == 0 or prev not in self.page_directory or self.page_directory[prev]['is_base']:
+            if prev == 0 or prev not in self.page_directory or self.page_directory[prev]['is_base']: #stop if last/earliest record
                 current_rid = None
                 break
             current_rid = prev
@@ -278,9 +286,10 @@ class Table:
         if not pr.tail_pages:
             return
 
+        #testing
         #print(f"[MERGE] starting pr={pr_index}, tail_pages={len(pr.tail_pages)}")
 
-        # collect all tail entries for this page range, sorted newest first (most negative RID first)
+        #collect all tail entries for this page range, sorted newest first
         tail_entries = sorted(
             [(rid, loc) for rid, loc in self.page_directory.items()
              if not loc['is_base'] and loc['page_range'] == pr_index],
@@ -290,7 +299,7 @@ class Table:
         if not tail_entries:
             return
 
-        # one pass: for each tail record newest-first, record latest values per base_rid
+        #one pass: for each tail record newest first, record latest values per base_rid
         seen = {}
         for tail_rid, tail_loc in tail_entries:
             base_rid_val = self._read_tail_col(tail_loc, BASE_RID_COLUMN)
@@ -308,7 +317,7 @@ class Table:
         if not seen:
             return
 
-        # write merged values into base pages — one get/dirty/unpin per col per base record
+        #write merged values into base pages - one get/dirty/unpin per column per base record
         for base_rid_val, (base_loc, vals) in seen.items():
             bp_i = base_loc['page_index']
             base_slot = base_loc['slot']
@@ -319,7 +328,7 @@ class Table:
                 self.bufferpool.mark_dirty(pid)
                 self.bufferpool.unpin(pid)
 
-        # TPS = newest tail rid we merged (most negative value)
+        #TPS = newest tail rid we merged - update TPS after merge is done for future merges to know where the threshold is
         last_tail_rid = tail_entries[0][0]
         #print(f"[MERGE] done pr={pr_index}, TPS={last_tail_rid}, merged {len(seen)} records")
 
@@ -330,6 +339,7 @@ class Table:
                 page_id = self._page_id(pr_index, 'base', col_index, bp_i)
                 self.disk.write_tps(page_id, last_tail_rid)
 
+    #for when we need to close database
     def save_to_disk(self, db_path):
         self.bufferpool.flush_all()
         meta = {
@@ -340,10 +350,11 @@ class Table:
             'pr_tail_record_counts': [[tp.num_records for tp in pr.tail_pages] for pr in self.page_ranges],
             'tps': [pr.tps for pr in self.page_ranges],
         }
-        os.makedirs(os.path.join(db_path, self.name), exist_ok=True)
+        os.makedirs(os.path.join(db_path, self.name), exist_ok = True)
         with open(os.path.join(db_path, self.name, 'meta.json'), 'w') as f:
             json.dump(meta, f)
 
+    #for opening database
     def load_from_disk(self, db_path):
         meta_path = os.path.join(db_path, self.name, 'meta.json')
         if not os.path.exists(meta_path):
@@ -360,7 +371,7 @@ class Table:
             meta['pr_tail_record_counts'],
             meta['tps']
         ):
-            pr = Page_Range(self.num_columns, num_base_pages=len(base_counts))
+            pr = Page_Range(self.num_columns, num_base_pages = len(base_counts))
             for j, count in enumerate(base_counts):
                 pr.base_pages[j].num_records = count
                 for col in range(pr.base_pages[j].total_columns):
@@ -378,6 +389,7 @@ class Table:
             self.page_ranges.append(pr)
         self._rebuild_indexes()
 
+    #also for opening database!
     def _rebuild_indexes(self):
         for rid, loc in self.page_directory.items():
             if not loc['is_base']:
