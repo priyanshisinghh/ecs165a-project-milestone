@@ -1,9 +1,6 @@
 from lstore.index import Index
 from time import time
-from lstore.page import (Base_Page, Tail_Page, Page_Range,
-                         BASE_METADATA_COLUMNS, TAIL_METADATA_COLUMNS, VALUE_SIZE,
-                         INDIRECTION_COLUMN, RID_COLUMN, TIMESTAMP_COLUMN,
-                         SCHEMA_ENCODING_COLUMN, BASE_RID_COLUMN)
+from lstore.page import *
 from lstore.bufferpool import Bufferpool
 import os
 import json
@@ -35,7 +32,7 @@ class Table:
         self.rid_counter = 0
         self.tail_rid_counter = -1
         self.update_count = 0
-        self.MERGE_THRESHOLD = 10  # merge after this many tail pages per page range
+        self.MERGE_THRESHOLD = 10
         self.merged = False
         self.last_merged = -1
         self._add_page_range()
@@ -281,7 +278,7 @@ class Table:
         if not pr.tail_pages:
             return
 
-        print(f"[MERGE] starting pr={pr_index}, tail_pages={len(pr.tail_pages)}")
+        #print(f"[MERGE] starting pr={pr_index}, tail_pages={len(pr.tail_pages)}")
 
         # collect all tail entries for this page range, sorted newest first (most negative RID first)
         tail_entries = sorted(
@@ -324,7 +321,7 @@ class Table:
 
         # TPS = newest tail rid we merged (most negative value)
         last_tail_rid = tail_entries[0][0]
-        print(f"[MERGE] done pr={pr_index}, TPS={last_tail_rid}, merged {len(seen)} records")
+        #print(f"[MERGE] done pr={pr_index}, TPS={last_tail_rid}, merged {len(seen)} records")
 
         total_cols = BASE_METADATA_COLUMNS + self.num_columns
         for bp_i in range(len(pr.base_pages)):
