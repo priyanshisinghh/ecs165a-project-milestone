@@ -1,69 +1,82 @@
+import threading
 from lstore.table import Table, Record
-from lstore.index import Index
+
 
 class Transaction:
-    tid_counter = 0 
-    tid_lock = threading.Lock() #lock to protect transaction
+    tid_counter = 0
+    tid_lock = threading.Lock()
 
     def __init__(self):
-        self.queries = []
-        self.locks_held = []  #list of rids locked by this transaction
         with Transaction.tid_lock:
             self.tid = Transaction.tid_counter
             Transaction.tid_counter += 1
-        self.lock_manager = None  #set by TransactionWorker before run()
+
+        #list of (query_fn, args) to execute
+        self.queries = []
+
+        #undo log: list of callables that reverse each successful write
+        self._undo_log = []
+
+        #injected by TransactionWorker before run() is called
+        self.lock_manager = None
 
     def add_query(self, query, table, *args):
         self.queries.append((query, table, args))
 
     def run(self):
-        #acquire the right lock before running the query - if the lock cannot be acquired, then abort.
         for query, table, args in self.queries:
-            if not self.acquire_lock(query, table, args):
+            #inject our tid and lock manager into the Query object so it can acquire locks
+            query.__self__.lock_manager = self.lock_manager
+
+            result = query(*args, tid = self.tid)
+            if result is False:
                 return self.abort()
-            result = query(*args)
-            if result == False:
-                return self.abort()
+
+            self.record_undo(query, table, args, result)
+
         return self.commit()
-
-    #determine which lock is needed and attempt to acquire it.
-    def acquire_lock(self, query, table, args):
-        if self.lock_manager is None:
-            return True  #no lock manager = no concurrency control, allow
-
-        query_name = query.__name__
-        write_ops = {'update', 'insert', 'delete', 'increment'}
-        read_ops  = {'select', 'select_version', 'sum', 'sum_version'}
-
-        if query_name in write_ops:
-            primary_key = args[0]
-            rids = table.index.locate(table.key, primary_key)
-            if not rids:
-                return True 
-            rid = rids[0]
-            if not self.lock_manager.acquire_exclusive(rid, self.tid):
-                return False
-            self.locks_held.append(rid)
-
-        elif query_name in read_ops:
-            primary_key = args[0]
-            rids = table.index.locate(table.key, primary_key)
-            if not rids:
-                return True
-            rid = rids[0]
-            if not self.lock_manager.acquire_shared(rid, self.tid):
-                return False
-            self.locks_held.append(rid)
-
-        return True
-
-    #let the transaction go / go thru
-    def abort(self):
-        if self.lock_manager:
-            self.lock_manager.release_all(self.tid)
-        return False
 
     def commit(self):
         if self.lock_manager:
             self.lock_manager.release_all(self.tid)
+        self.undo_log.clear()
         return True
+
+    #undo every successful write in reverse order
+    def abort(self):
+        for undo_fn in reversed(self.undo_log):
+            try:
+                undo_fn()
+            except Exception:
+                pass  
+
+        if self.lock_manager:
+            self.lock_manager.release_all(self.tid)
+        self.undo_log.clear()
+        return False
+
+    def record_undo(self, query, table, args, result):
+        query_name = query.__name__
+
+        #undo an insert by deleting the record that was just createsd
+        if query_name == 'insert':
+            primary_key = args[table.key]
+            q = query.__self__          
+            self.undo_log.append(lambda pk = primary_key, _q=q: _q.delete(pk))
+
+        #undo an update by restoring the valyes that existed before
+        elif query_name == 'update':
+            primary_key = args[0]
+            q = query.__self__
+
+            #old_data is saved implicitly via the undo: re-read the latest tail record and use its INDIRECTION to find the previous state
+            #for 2PL - read the current values from the table right now and store them as the restore target
+            
+            rids = table.index.locate(table.key, primary_key)
+            if rids:
+                base_rid = rids[0]
+                old_vals = table._get_latest_values(base_rid)
+                self.undo_log.append(lambda pk=primary_key, vals=old_vals, _q=q: _q.update(pk, *vals))
+
+        elif query_name == 'delete':
+            pass
