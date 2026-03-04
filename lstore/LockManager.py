@@ -13,7 +13,7 @@ class LockManager:
             #add to dictionary of locks
             if rid not in self.rid_locks:
                 self.rid_locks[rid] = {'shared': set(), 'exclusive': None}
-            record = self.locks[rid]
+            record = self.rid_locks[rid]
             #can't get shared if someone else has exclusive
             if record['exclusive'] is not None and record['exclusive'] != tid:
                 return False
@@ -36,8 +36,11 @@ class LockManager:
             return True
 
     def release_all(self, tid):
-        with self._lock:
-            for rid, locks in self.rid_locks.items():
+        with self.lock:
+            for rid, locks in list(self.rid_locks.items()):
                 locks['shared'].discard(tid)
                 if locks['exclusive'] == tid:
                     locks['exclusive'] = None
+                # optional: remove rid entry if no locks remain
+                #if not locks['shared'] and locks['exclusive'] is None:
+                    #del self.rid_locks[rid]
