@@ -5,11 +5,11 @@ from lstore.LockManager import LockManager
 class TransactionWorker:
     MAX_RETRIES = 20
 
-    def __init__(self, transactions = []):
-        self.transactions = transactions
+    def __init__(self, transactions = None):
+        self.transactions = transactions if transactions is not None else []
         self.stats = []         
         self.result = 0         #count of committed transactions
-        self.lock_manager = None   #set externally before run()
+        self.lock_manager = LockManager()   #set externally before run()
         self.thread = None
 
     def add_transaction(self, t):
