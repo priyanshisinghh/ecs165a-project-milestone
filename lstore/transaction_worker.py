@@ -31,8 +31,7 @@ class TransactionWorker:
             committed = False
             for attempt in range(self.MAX_RETRIES):
                 outcome = transaction.run()
-                if self.lock_manager is not None:
-                    self.lock_manager.release_all(transaction.tid)
+                
                     
                 if outcome:
                     committed = True
