@@ -27,7 +27,7 @@ class Query:
                 return False
         return True
 
-    def _lock_write(self, rids, tid):
+    def lock_write(self, rids, tid):
         for rid in rids:
             if not self.get_exclusive_lock(rid, tid):
                 return False
