@@ -4,6 +4,7 @@ from lstore.page import *
 from lstore.bufferpool import Bufferpool
 import os
 import json
+import threading
 
 
 class Record:
@@ -36,20 +37,24 @@ class Table:
         self.merged = False
         self.last_merged = -1
         self._add_page_range()
+        self._dir_lock = threading.RLock()
+        self._rid_lock = threading.Lock()
 
     #lots of helper functiomns
     def _add_page_range(self):
         self.page_ranges.append(Page_Range(self.num_columns))
 
     def _new_base_rid(self):
-        rid = self.rid_counter
-        self.rid_counter += 1
-        return rid
+        with self._rid_lock:
+            rid = self.rid_counter
+            self.rid_counter += 1
+            return rid
 
     def _new_tail_rid(self):
-        rid = self.tail_rid_counter
-        self.tail_rid_counter -= 1
-        return rid
+        with self._rid_lock:
+            rid = self.tail_rid_counter
+            self.tail_rid_counter -= 1
+            return rid
 
     def _page_id(self, pr_index, page_type, col_index, page_index):
         return (self.name, pr_index, page_type, col_index, page_index)
