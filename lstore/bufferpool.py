@@ -1,5 +1,6 @@
 from typing import Dict, Tuple
 from lstore.page import Page, PAGE_SIZE, VALUE_SIZE, DATA_SIZE
+import threading
 
 #page_id: (table_name, page_range_id, "base"/"tail", col_index, page_index)
 PageId = Tuple[str, int, str, int, int]
@@ -22,6 +23,7 @@ class Bufferpool:
         self.frames = {}
         self.clock = 0
         self.dirty_clock = 0
+        self._lock=threading.RLock()
 
     def tick(self, frame):
         self.clock += 1
@@ -45,48 +47,51 @@ class Bufferpool:
 
     #pins and returns page, must be used with unpin
     def get_page(self, page_id):
-        frame = self.frames.get(page_id)
+        with self._lock:
+            frame = self.frames.get(page_id)
 
-        #already in bufferpool - no need to do anything else
-        if frame is not None:
-            frame.pin_count += 1
+            #already in bufferpool - no need to do anything else
+            if frame is not None:
+                frame.pin_count += 1
+                self.tick(frame)
+                return frame.page
+
+            if len(self.frames) >= self.capacity:
+                self.evict_one()
+
+            #read raw bytes from disk and reconstruct a Page object
+            page_data = self.disk.read_page(page_id)
+            if page_data is None:
+                page = Page()
+            else:
+                page = Page()
+                page.data = bytearray(page_data)
+                page.num_records = int.from_bytes(page.data[DATA_SIZE: DATA_SIZE + VALUE_SIZE], byteorder='big', signed=False)
+                page.ptr = page.num_records * VALUE_SIZE
+                #page.ptr = self.find_ptr(page)
+                #page.num_records = page.ptr // VALUE_SIZE
+
+            frame = Frame(page = page, dirty = False, dirty_seq = 0, pin_count = 1, last_used = 0)
             self.tick(frame)
-            return frame.page
-
-        if len(self.frames) >= self.capacity:
-            self.evict_one()
-
-        #read raw bytes from disk and reconstruct a Page object
-        page_data = self.disk.read_page(page_id)
-        if page_data is None:
-            page = Page()
-        else:
-            page = Page()
-            page.data = bytearray(page_data)
-            page.num_records = int.from_bytes(page.data[DATA_SIZE: DATA_SIZE + VALUE_SIZE], byteorder='big', signed=False)
-            page.ptr = page.num_records * VALUE_SIZE
-            #page.ptr = self.find_ptr(page)
-            #page.num_records = page.ptr // VALUE_SIZE
-
-        frame = Frame(page = page, dirty = False, dirty_seq = 0, pin_count = 1, last_used = 0)
-        self.tick(frame)
-        self.frames[page_id] = frame
-        return page
+            self.frames[page_id] = frame
+            return page
 
     def mark_dirty(self, page_id):
-        frame = self.frames.get(page_id)
-        if frame is None:
-            return
-        frame.dirty = True
-        frame.dirty_seq = self.next_dirty_seq()
+        with self._lock:
+            frame = self.frames.get(page_id)
+            if frame is None:
+                return
+            frame.dirty = True
+            frame.dirty_seq = self.next_dirty_seq()
 
     def unpin(self, page_id):
-        frame = self.frames.get(page_id)
-        if frame is None:
-            raise KeyError(f"unpin called for non-cached page_id = {page_id}")
-        if frame.pin_count <= 0:
-            raise RuntimeError(f"unpin called when pin_count already 0 for {page_id}")
-        frame.pin_count -= 1
+        with self._lock:
+            frame = self.frames.get(page_id)
+            if frame is None:
+                raise KeyError(f"unpin called for non-cached page_id = {page_id}")
+            if frame.pin_count <= 0:
+                raise RuntimeError(f"unpin called when pin_count already 0 for {page_id}")
+            frame.pin_count -= 1
 
     #writes page from memory to disk
     def flush_page(self, page_id, max_dirty_seq = None):
