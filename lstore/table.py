@@ -179,20 +179,18 @@ class Table:
             page.write(value)
             self.bufferpool.mark_dirty(page_id)
             self.bufferpool.unpin(page_id)
-        with seld._dir_lock:
+            
+        with self._dir_lock:
             self.page_directory[tail_rid] = {
                 'is_base': False,
                 'page_range': pr_index,
                 'page_index': tp_index,
                 'slot': slot
-        }
-
-        self._write_base_col(base_loc, INDIRECTION_COLUMN, tail_rid)
-
-        for i, val in enumerate(data):
-            if val is not None and self.index.indices[i] is not None:
-                self.index.update_entry(i, old_data[i], val, base_rid)
-
+            }
+            self._write_base_col(base_loc, INDIRECTION_COLUMN, tail_rid)
+            for i, val in enumerate(data):
+                if val is not None and self.index.indices[i] is not None:
+                    self.index.update_entry(i, old_data[i], val, base_rid)
         self.update_count += 1
 
         #trigger merge when this page range hits the tail page threshold
