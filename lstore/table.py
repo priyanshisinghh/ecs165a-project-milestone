@@ -36,9 +36,9 @@ class Table:
         self.MERGE_THRESHOLD = 10
         self.merged = False
         self.last_merged = -1
-        self._add_page_range()
         self._dir_lock = threading.RLock()
         self._rid_lock = threading.Lock()
+        self._add_page_range()
 
     #lots of helper functiomns
     def _add_page_range(self):
@@ -120,17 +120,17 @@ class Table:
             self.bufferpool.mark_dirty(page_id)
             self.bufferpool.unpin(page_id)
 
-        self.page_directory[rid] = {
-            'is_base': True,
-            'page_range': pr_index,
-            'page_index': bp_index,
-            'slot': slot
-        }
-
-        for i, val in enumerate(data):
-            if self.index.indices[i] is None:
-                self.index.create_index(i)
-            self.index.insert_entry(i, val, rid)
+        with self._dir_lock:
+            self.page_directory[rid] = {
+                'is_base': True,
+                'page_range': pr_index,
+                'page_index': bp_index,
+                'slot': slot
+            }
+            for i, val in enumerate(data):
+                if self.index.indices[i] is None:
+                    self.index.create_index(i)
+                self.index.insert_entry(i, val, rid)
 
         return True
 
