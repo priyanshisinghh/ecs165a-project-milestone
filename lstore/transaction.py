@@ -44,7 +44,7 @@ class Transaction:
 
     #undo every successful write in reverse order
     def abort(self):
-        for undo_fn in reversed(_self._undo_log):
+        for undo_fn in reversed(self._undo_log):
             try:
                 undo_fn()
             except Exception:
