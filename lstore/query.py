@@ -50,15 +50,15 @@ class Query:
         rIDs = self.table.index.locate(self.table.key, primary_key)
         if not rIDs:
             return False
-
         #do not want to read tail pages directly
         base_rid = rIDs[0]
         if not self.lock_write([base_rid], tid):
             return False
-
-        self.table.index.indices[self.table.key].pop(primary_key, None)
-        del self.table.page_directory[base_rid]
+        with self.table._dir_lock:
+            self.table.index.indices[self.table.key].pop(primary_key, None)
+            del self.table.page_directory[base_rid]
         return True
+        
 
     #insert creates a new RID, so we only need to lock page directory and index
     def insert(self, *columns, tid = None):
@@ -70,7 +70,8 @@ class Query:
 
         #fall back to full scan if column has no index
         if not rIDs and self.table.index.indices[search_key_index] is None:
-            rIDs = [rid for rid, loc in self.table.page_directory.items() if loc['is_base']]
+            with self.table._dir_lock:
+                rIDs = [rid for rid, loc in self.table.page_directory.items() if loc['is_base']]
 
         base_rids = [
             rid for rid in rIDs
