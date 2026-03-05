@@ -133,7 +133,7 @@ class Query:
             and self.table.page_directory[rid]['is_base']
         ]
 
-        if not self._lock_read(base_rids, tid):
+        if not self.lock_read(base_rids, tid):
             return False
 
         search_columns = [0] * self.table.num_columns
