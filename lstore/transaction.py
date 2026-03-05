@@ -25,58 +25,43 @@ class Transaction:
 
     def run(self):
         for query, table, args in self.queries:
-            #inject our tid and lock manager into the Query object so it can acquire locks
             query.__self__.lock_manager = self.lock_manager
 
-            result = query(*args, tid = self.tid)
+            pre_snapshot = self._capture_pre_snapshot(query, table, args)
+
+            result = query(*args, tid=self.tid)
             if result is False:
                 return self.abort()
 
-            self.record_undo(query, table, args, result)
+            self.record_undo(query, table, args, result, pre_snapshot)
 
         return self.commit()
 
-    def commit(self):
-        if self.lock_manager:
-            self.lock_manager.release_all(self.tid)
-        self._undo_log.clear()
-        return True
+    def _capture_pre_snapshot(self, query, table, args):
+        if query.__name__ in ('update', 'delete'):
+            primary_key = args[0]
+            rids = table.index.locate(table.key, primary_key)
+            if rids:
+                return table._get_latest_values(rids[0])
+        return None
 
-    #undo every successful write in reverse order
-    def abort(self):
-        for undo_fn in reversed(self._undo_log):
-            try:
-                undo_fn()
-            except Exception:
-                pass  
-
-        if self.lock_manager:
-            self.lock_manager.release_all(self.tid)
-        self._undo_log.clear()
-        return False
-
-    def record_undo(self, query, table, args, result):
+    def record_undo(self, query, table, args, result, pre_snapshot=None):
         query_name = query.__name__
 
-        #undo an insert by deleting the record that was just createsd
         if query_name == 'insert':
             primary_key = args[table.key]
-            q = query.__self__          
-            self._undo_log.append(lambda pk = primary_key, _q=q: _q.delete(pk))
+            q = query.__self__
+            self._undo_log.append(lambda pk=primary_key, _q=q: _q.delete(pk))
 
-        #undo an update by restoring the valyes that existed before
         elif query_name == 'update':
             primary_key = args[0]
             q = query.__self__
-
-            #old_data is saved implicitly via the undo: re-read the latest tail record and use its INDIRECTION to find the previous state
-            #for 2PL - read the current values from the table right now and store them as the restore target
-            
-            rids = table.index.locate(table.key, primary_key)
-            if rids:
-                base_rid = rids[0]
-                old_vals = table._get_latest_values(base_rid)
+            if pre_snapshot is not None:
+                old_vals = pre_snapshot
                 self._undo_log.append(lambda pk=primary_key, vals=old_vals, _q=q: _q.update(pk, *vals))
 
         elif query_name == 'delete':
-            pass
+            q = query.__self__
+            if pre_snapshot is not None:
+                old_vals = pre_snapshot
+                self._undo_log.append(lambda vals=old_vals, _q=q: _q.insert(*vals))
