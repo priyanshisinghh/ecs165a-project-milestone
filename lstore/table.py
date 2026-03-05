@@ -179,12 +179,12 @@ class Table:
             page.write(value)
             self.bufferpool.mark_dirty(page_id)
             self.bufferpool.unpin(page_id)
-
-        self.page_directory[tail_rid] = {
-            'is_base': False,
-            'page_range': pr_index,
-            'page_index': tp_index,
-            'slot': slot
+        with seld._dir_lock:
+            self.page_directory[tail_rid] = {
+                'is_base': False,
+                'page_range': pr_index,
+                'page_index': tp_index,
+                'slot': slot
         }
 
         self._write_base_col(base_loc, INDIRECTION_COLUMN, tail_rid)
