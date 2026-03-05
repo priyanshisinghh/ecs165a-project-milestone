@@ -32,6 +32,7 @@ class LockManager:
                 return False
             if record['exclusive'] is not None and record['exclusive'] != tid:
                 return False
+            record['shared'].discard(tid) #in cases where the tid already holds a shared lock (like queries w/ reading then writing)
             record['exclusive'] = tid
             return True
 
@@ -41,6 +42,6 @@ class LockManager:
                 locks['shared'].discard(tid)
                 if locks['exclusive'] == tid:
                     locks['exclusive'] = None
-                # optional: remove rid entry if no locks remain
-                #if not locks['shared'] and locks['exclusive'] is None:
-                    #del self.rid_locks[rid]
+                #remove rid entry if no locks remain
+                if not locks['shared'] and locks['exclusive'] is None:
+                    del self.rid_locks[rid]
