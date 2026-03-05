@@ -39,12 +39,12 @@ class Transaction:
     def commit(self):
         if self.lock_manager:
             self.lock_manager.release_all(self.tid)
-        self.undo_log.clear()
+        self._undo_log.clear()
         return True
 
     #undo every successful write in reverse order
     def abort(self):
-        for undo_fn in reversed(self.undo_log):
+        for undo_fn in reversed(_self._undo_log):
             try:
                 undo_fn()
             except Exception:
@@ -52,7 +52,7 @@ class Transaction:
 
         if self.lock_manager:
             self.lock_manager.release_all(self.tid)
-        self.undo_log.clear()
+        self._undo_log.clear()
         return False
 
     def record_undo(self, query, table, args, result):
@@ -62,7 +62,7 @@ class Transaction:
         if query_name == 'insert':
             primary_key = args[table.key]
             q = query.__self__          
-            self.undo_log.append(lambda pk = primary_key, _q=q: _q.delete(pk))
+            self._undo_log.append(lambda pk = primary_key, _q=q: _q.delete(pk))
 
         #undo an update by restoring the valyes that existed before
         elif query_name == 'update':
@@ -76,7 +76,7 @@ class Transaction:
             if rids:
                 base_rid = rids[0]
                 old_vals = table._get_latest_values(base_rid)
-                self.undo_log.append(lambda pk=primary_key, vals=old_vals, _q=q: _q.update(pk, *vals))
+                self._undo_log.append(lambda pk=primary_key, vals=old_vals, _q=q: _q.update(pk, *vals))
 
         elif query_name == 'delete':
             pass
