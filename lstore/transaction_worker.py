@@ -1,5 +1,5 @@
 import threading
-from lstore.lock_manager import LockManager
+from lstore.LockManager import LockManager
 
 
 class TransactionWorker:
