@@ -1,47 +1,53 @@
 import threading
 
+
 class LockManager:
     def __init__(self):
-        #dictionary of locks - rid -> {shared: set of transaction ids, exclusive: transaction id or None}
-        #keeps track of all active locks on all RIDs
-        self.rid_locks = {}
-        self.lock = threading.Lock()  #protects the rid_locks dict itself
+        # rid -> {'shared': set(), 'exclusive': tid | None}
+        self._locks = {}
+        self._lock = threading.Lock()
 
-    #read lock - multiple transactions can hold a shared lock simultaneuosly 
+    #returning/creating rid lock entries
+    def entry(self, rid):
+        if rid not in self.locks:
+            self.locks[rid] = {'shared': set(), 'exclusive': None}
+        return self.locks[rid]
+
+    #only granted is no transaction holds an exclusive lock
     def acquire_shared(self, rid, tid):
         with self.lock:
-            #add to dictionary of locks
-            if rid not in self.rid_locks:
-                self.rid_locks[rid] = {'shared': set(), 'exclusive': None}
-            record = self.rid_locks[rid]
-            #can't get shared if someone else has exclusive
-            if record['exclusive'] is not None and record['exclusive'] != tid:
-                return False
-            record['shared'].add(tid)
+            entry = self.entry(rid)
+            exclusive = entry['exclusive']
+            if exclusive is not None and exclusive != tid:
+                return False        
+            entry['shared'].add(tid)
             return True
 
-    #write lock - only one transaction can hold an exclusive lock at a time
+    #only granted if no transaction has any lock
+    #a transaction w/ shared lock can upgrade to exclusive (read -> write)
     def acquire_exclusive(self, rid, tid):
         with self.lock:
-            if rid not in self.rid_locks:
-                self.rid_locks[rid] = {'shared': set(), 'exclusive': None}
-            record = self.rid_locks[rid]
-            #can't get exclusive if anyone else holds shared or exclusive
-            others_records_sharing = record['shared'] - {tid}
-            if others_records_sharing:
-                return False
-            if record['exclusive'] is not None and record['exclusive'] != tid:
-                return False
-            record['shared'].discard(tid) #in cases where the tid already holds a shared lock (like queries w/ reading then writing)
-            record['exclusive'] = tid
+            entry = self.entry(rid)
+            other_transactions_shared = entry['shared'] - {tid}
+            if other_transactions_shared:
+                return False        
+            exclusive = entry['exclusive']
+            if exclusive is not None and exclusive != tid:
+                return False       
+            entry['exclusive'] = tid
+            entry['shared'].discard(tid)   #in case of upgrade
             return True
 
+    
     def release_all(self, tid):
         with self.lock:
-            for rid, locks in list(self.rid_locks.items()):
-                locks['shared'].discard(tid)
-                if locks['exclusive'] == tid:
-                    locks['exclusive'] = None
-                #remove rid entry if no locks remain
-                if not locks['shared'] and locks['exclusive'] is None:
-                    del self.rid_locks[rid]
+            for entry in self.locks.values():
+                entry['shared'].discard(tid)
+                if entry['exclusive'] == tid:
+                    entry['exclusive'] = None
+                    
+            #remove entries with no active locks 
+            empty = [rid for rid, e in self.locks.items()
+                     if not e['shared'] and e['exclusive'] is None]
+            for rid in empty:
+                del self.locks[rid]
