@@ -32,14 +32,14 @@ class Table:
         self.last_merged = -1
 
         #methods that hold it can call other methods that also acquire it
-        self._dir_lock = threading.RLock()
+        self.dir_lock = threading.RLock()
 
         #Guards rid_counter and tail_rid_counter
-        self._rid_lock = threading.Lock()
+        self.rid_lock = threading.Lock()
 
         #Serializes the duplicate-key check + page_directory/index write in insert()
-        self._insert_lock = threading.Lock()
-        self._add_page_range()
+        self.insert_lock = threading.Lock()
+        self.add_page_range()
 
 
     def add_page_range(self):
@@ -62,21 +62,21 @@ class Table:
 
     #read/write one base/tail col
     def read_base_col(self, location, col_index):
-        page_id = self._page_id(location['page_range'], 'base', col_index, location['page_index'])
+        page_id = self.page_id(location['page_range'], 'base', col_index, location['page_index'])
         page = self.bufferpool.get_page(page_id)
         val = page.read(location['slot'])
         self.bufferpool.unpin(page_id)
         return val
 
     def write_base_col(self, location, col_index, value):
-        page_id = self._page_id(location['page_range'], 'base', col_index, location['page_index'])
+        page_id = self.page_id(location['page_range'], 'base', col_index, location['page_index'])
         page = self.bufferpool.get_page(page_id)
         page.overwrite(location['slot'], value)
         self.bufferpool.mark_dirty(page_id)
         self.bufferpool.unpin(page_id)
 
     def read_tail_col(self, location, col_index):
-        page_id = self._page_id(location['page_range'], 'tail', col_index, location['page_index'])
+        page_id = self.page_id(location['page_range'], 'tail', col_index, location['page_index'])
         page = self.bufferpool.get_page(page_id)
         val = page.read(location['slot'])
         self.bufferpool.unpin(page_id)
@@ -181,21 +181,21 @@ class Table:
         full_tail_data = tail_meta + new_data
 
         for col_index, value in enumerate(full_tail_data):
-            page_id = self._page_id(pr_index, 'tail', col_index, tp_index)
+            page_id = self.page_id(pr_index, 'tail', col_index, tp_index)
             page = self.bufferpool.get_page(page_id)
             page.write(value)
             self.bufferpool.mark_dirty(page_id)
             self.bufferpool.unpin(page_id)
 
         #insert into page directory and index
-        with self._dir_lock:
+        with self.dir_lock:
             self.page_directory[tail_rid] = {
                 'is_base': False,
                 'page_range': pr_index,
                 'page_index': tp_index,
                 'slot': slot
             }
-            self._write_base_col(base_loc, INDIRECTION_COLUMN, tail_rid)
+            self.write_base_col(base_loc, INDIRECTION_COLUMN, tail_rid)
             
             for i, val in enumerate(data):
                 if val is not None and self.index.indices[i] is not None:
@@ -209,7 +209,7 @@ class Table:
         if (tail_pages % self.MERGE_THRESHOLD == 0
                 and tail_pages > self.last_merged
                 and not self.merged):
-            self.__merge(pr_index)
+            self.merge(pr_index)
             self.merged = True
             self.last_merged = tail_pages
         elif tail_pages != self.last_merged:
@@ -238,7 +238,7 @@ class Table:
             if not base_loc['is_base']:
                 return False
 
-            indirection = self._read_base_col(base_loc, INDIRECTION_COLUMN)
+            indirection = self.read_base_col(base_loc, INDIRECTION_COLUMN)
             pr = self.page_ranges[base_loc['page_range']]
             tps = pr.get_tps(base_loc['page_index'])
 
@@ -299,7 +299,7 @@ class Table:
             if current_rid is None:
                 for i in range(self.num_columns):
                     if projected_columns[i]:
-                        values[i] = self._read_base_col(base_loc, BASE_METADATA_COLUMNS + i)
+                        values[i] = self.read_base_col(base_loc, BASE_METADATA_COLUMNS + i)
             else:
                 tail_loc = self.page_directory[current_rid]
                 for i in range(self.num_columns):
@@ -308,7 +308,7 @@ class Table:
 
         return Record(base_rid, values[self.key], values)
 
-    def __merge(self, pr_index):
+    def merge(self, pr_index):
         with self.dir_lock:
             pr = self.page_ranges[pr_index]
             if not pr.tail_pages:
@@ -347,7 +347,7 @@ class Table:
             bp_i = base_loc['page_index']
             base_slot = base_loc['slot']
             for col in range(self.num_columns):
-                pid = self._page_id(pr_index, 'base', BASE_METADATA_COLUMNS + col, bp_i)
+                pid = self.page_id(pr_index, 'base', BASE_METADATA_COLUMNS + col, bp_i)
                 page = self.bufferpool.get_page(pid)
                 page.overwrite(base_slot, vals[col])
                 self.bufferpool.mark_dirty(pid)
@@ -377,7 +377,7 @@ class Table:
                                           for pr in self.page_ranges],
                 'tps': [pr.tps for pr in self.page_ranges],
             }
-        os.makedirs(os.path.join(db_path, self.name), exist_ok=True)
+        os.makedirs(os.path.join(db_path, self.name), exist_ok = True)
         with open(os.path.join(db_path, self.name, 'meta.json'), 'w') as f:
             json.dump(meta, f)
 
@@ -397,7 +397,7 @@ class Table:
             meta['pr_tail_record_counts'],
             meta['tps']
         ):
-            pr = Page_Range(self.num_columns, num_base_pages=len(base_counts))
+            pr = Page_Range(self.num_columns, num_base_pages = len(base_counts))
             for j, count in enumerate(base_counts):
                 pr.base_pages[j].num_records = count
                 for col in range(pr.base_pages[j].total_columns):
