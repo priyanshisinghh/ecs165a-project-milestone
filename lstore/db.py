@@ -17,9 +17,9 @@ class Database:
             if db_path is not None:
                 return cls.registry.get(db_path)
             #fall back to most recently registered
-            #if cls.registry:
-            #   return next(reversed(cls._registry.values()))
-            #return None
+            if cls.registry:
+               return next(reversed(cls.registry.values()))
+            return None
 
     def __init__(self):
         self.table_count = 0
@@ -56,8 +56,8 @@ class Database:
             return
 
         #unregisterlock when the database closes
-        with Database._registry_lock:
-            Database._registry.pop(self.db_path, None)
+        with Database.registry_lock:
+            Database.registry.pop(self.db_path, None)
 
         meta = {'tables': []}
         with self.tables_lock:
