@@ -4,8 +4,8 @@ import threading
 class LockManager:
     def __init__(self):
         # rid -> {'shared': set(), 'exclusive': tid | None}
-        self._locks = {}
-        self._lock = threading.Lock()
+        self.locks = {}
+        self.lock = threading.Lock()
 
     #returning/creating rid lock entries
     def entry(self, rid):
