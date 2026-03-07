@@ -3,7 +3,7 @@ import json
 import threading
 from lstore.table import Table
 from lstore.disk import DiskManager
-from lstore.lock_manager import LockManager
+from lstore.LockManager import LockManager
 
 
 class Database:
