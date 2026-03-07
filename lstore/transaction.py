@@ -26,17 +26,13 @@ class Transaction:
         for query, table, args in self.queries:
             #inject lock state into query object
             query.__self__.lock_manager = self.lock_manager
-
-            #capture the before image before running query
-            pre_snapshot = self._capture_pre_snapshot(query, table, args)
-
-            result = query(*args, tid=self.tid)
-
+            
+            #capture the before image before running the query
+            pre_snapshot = self.capture_pre_snapshot(query, table, args)
+            result = query(*args, tid = self.tid)
             if result is False:
                 return self.abort()
-
             self.record_undo(query, table, args, pre_snapshot)
-
         return self.commit()
 
     def commit(self):
@@ -56,7 +52,6 @@ class Transaction:
             self.lock_manager.release_all(self.tid)
         self.undo_log.clear()
         return False
-
 
     def capture_pre_snapshot(self, query, table, args):
         if query.__name__ in ('update', 'delete'):
