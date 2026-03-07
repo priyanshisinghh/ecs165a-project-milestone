@@ -11,6 +11,7 @@ class Database:
     registry_lock = threading.Lock()
 
     #return lock manager for the given path, for transaction worker to find database lock
+    @classmethod
     def get_lock_manager(cls, db_path = None):
         with cls.registry_lock:
             if db_path is not None:
