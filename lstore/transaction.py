@@ -58,7 +58,8 @@ class Transaction:
             primary_key = args[0]
             rids = table.index.locate(table.key, primary_key)
             if rids:
-                return table.get_latest_values(rids[0])
+                with table.dir_lock:
+                    return table.get_latest_values(rids[0])
         return None
 
     def record_undo(self, query, table, args, pre_snapshot):
