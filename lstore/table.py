@@ -115,7 +115,7 @@ class Table:
 
             all_values = [0, rid, int(time()), 0] + list(data)
             for col_index, value in enumerate(all_values):
-                page_id = self._page_id(pr_index, 'base', col_index, bp_index)
+                page_id = self.page_id(pr_index, 'base', col_index, bp_index)
                 page = self.bufferpool.get_page(page_id)
                 page.write(value)
                 self.bufferpool.mark_dirty(page_id)
@@ -289,7 +289,7 @@ class Table:
                 if loc is None or loc['is_base']:
                     current_rid = None
                     break
-                prev = self._read_tail_col(loc, INDIRECTION_COLUMN)
+                prev = self.read_tail_col(loc, INDIRECTION_COLUMN)
                 #if next "hop" exits tail chain
                 if (prev == 0 or prev not in self.page_directory or self.page_directory[prev]['is_base']):
                     current_rid = None
