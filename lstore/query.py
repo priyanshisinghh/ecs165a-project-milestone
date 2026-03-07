@@ -9,8 +9,9 @@ SCHEMA_ENCODING_COLUMN = 3
 class Query:
     def __init__(self, table):
         self.table = table
-        self.lock_manager = None   #injected by TransactionWorker
+        self.lock_manager = None   #injected into queries by TransactionWorker
 
+    #get lock
     def get_shared_lock(self, rid, tid):
         if self.lock_manager is None:
             return True
@@ -33,8 +34,6 @@ class Query:
                 return False
         return True
 
-
-    #reads the latest record version of a given RID
     def latest_record(self, search_RID, column_indexes, tid = None):
         if search_RID not in self.table.page_directory:
             return False
@@ -45,33 +44,33 @@ class Query:
             return False
         return self.table.read_record(search_RID, column_indexes)
 
-    #deletes a record (waits till merge to actually delete)
     def delete(self, primary_key, tid = None):
         rIDs = self.table.index.locate(self.table.key, primary_key)
         if not rIDs:
             return False
-        #do not want to read tail pages directly
+
         base_rid = rIDs[0]
         if not self.lock_write([base_rid], tid):
             return False
-        with self.table._dir_lock:
-            self.table.index.indices[self.table.key].pop(primary_key, None)
-            del self.table.page_directory[base_rid]
-        return True
-        
 
-    #insert creates a new RID, so we only need to lock page directory and index
+        with self.table.dir_lock:
+            if self.table.index.indices[self.table.key] is not None:
+                self.table.index.indices[self.table.key].pop(primary_key, None)
+            if base_rid in self.table.page_directory:
+                del self.table.page_directory[base_rid]
+        return True
+
     def insert(self, *columns, tid = None):
         return self.table.insert(list(columns))
 
-    #selects the record required
+    #go thru table for select/select version, query finds RIDs
     def select(self, search_key, search_key_index, projected_columns_index, tid = None):
         rIDs = self.table.index.locate(search_key_index, search_key)
 
-        #fall back to full scan if column has no index
         if not rIDs and self.table.index.indices[search_key_index] is None:
-            with self.table._dir_lock:
-                rIDs = [rid for rid, loc in self.table.page_directory.items() if loc['is_base']]
+            with self.table.dir_lock:
+                rIDs = [rid for rid, loc in self.table.page_directory.items()
+                        if loc['is_base']]
 
         base_rids = [
             rid for rid in rIDs
@@ -89,7 +88,6 @@ class Query:
                 records.append(record)
         return records
 
-    #reads a given version for a given record
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version, tid = None):
         rIDs = self.table.index.locate(search_key_index, search_key)
         if not rIDs:
@@ -111,7 +109,6 @@ class Query:
                 records.append(record)
         return records
 
-    #update a given record
     def update(self, primary_key, *columns, tid = None):
         rIDs = self.table.index.locate(self.table.key, primary_key)
         if not rIDs:
@@ -123,7 +120,7 @@ class Query:
 
         return self.table.update(primary_key, list(columns))
 
-    def sum(self, start_range, end_range, aggregate_column_index, tid = None):
+    def sum(self, start_range, end_range, aggregate_column_index, tid=None):
         rIDs = self.table.index.locate_range(self.table.key, start_range, end_range)
         if not rIDs:
             return False
@@ -147,8 +144,7 @@ class Query:
         return total
 
     def sum_version(self, start_range, end_range, aggregate_column_index, relative_version, tid = None):
-        rIDs = self.table.index.locate_range(
-            self.table.key, start_range, end_range)
+        rIDs = self.table.index.locate_range(self.table.key, start_range, end_range)
         if not rIDs:
             return False
 
@@ -165,8 +161,7 @@ class Query:
         search_columns[aggregate_column_index] = 1
         total = 0
         for rid in base_rids:
-            record = self.table.read_record_version(
-                rid, search_columns, relative_version)
+            record = self.table.read_record_version(rid, search_columns, relative_version)
             if record is not False:
                 total += record.columns[aggregate_column_index]
         return total
