@@ -9,7 +9,7 @@ class TransactionWorker:
         self.transactions = transactions if transactions is not None else []
         self.stats = []
         self.result = 0
-        self.lock_manager = Database.get_lock_manager()
+        self.lock_manager = None
         self.thread = None
 
     def add_transaction(self, t):
@@ -24,17 +24,19 @@ class TransactionWorker:
             self.thread.join()
 
     def _run(self):
+        #set up lock manager now
+        if self.lock_manager is None:
+            self.lock_manager = Database.get_lock_manager()
+
         for transaction in self.transactions:
             transaction.lock_manager = self.lock_manager
             committed = False
-
             for attempt in range(self.MAX_RETRIES):
                 outcome = transaction.run()
                 if outcome:
                     committed = True
                     break
-                #abort() is already inside transaction.run() 
-
+                #abort() is already called inside transaction.run()
+            
             self.stats.append(committed)
-
         self.result = sum(1 for s in self.stats if s)
