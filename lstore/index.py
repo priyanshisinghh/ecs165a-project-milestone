@@ -11,7 +11,7 @@ class Index:
         self.columns = table.num_columns
         self.indices = [None] * self.columns
         self.table = table
-
+        
         #one lock per column, always exists regardless of whether
         self.col_locks = [threading.RLock() for _ in range(self.columns)]
 
@@ -21,9 +21,11 @@ class Index:
         self.create_index(self.table.key)
 
     def locate(self, column, value):
+        #range check
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
 
+        #column locks needed now to not accidentally have multiple threads edit the same column at once
         with self.col_locks[column]:
             index = self.indices[column]
             if index is None:
@@ -63,7 +65,7 @@ class Index:
             raise ValueError("Column Out Of Bounds")
 
         if column == self.table.key:
-            return False  #primary key index cannot be dropped
+            return False
 
         with self.meta_lock:
             if self.indices[column] is None:
@@ -82,28 +84,27 @@ class Index:
 
             if column == self.table.key:
                 if index.get(key) is not None:
-                    return False  #duplicate primary key
+                    return False #do not want to insert data w/ already existing key
                 index[key] = [RID]
                 return True
 
             if index.get(key) is not None:
                 if RID not in index[key]:
-                    index[key].append(RID)
+                    index[key].append(RID) #no duplicate RIDs
                 else:
-                    return False  
+                    return False
             else:
-                index[key] = [RID]
+                index[key] = [RID] #create new pair in index if it doesn't already exist
             return True
 
-    #remove a single RID from the list stored under specified key
     def remove_entry(self, column, key, RID):
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
 
         if column == self.table.key:
-            return False  #primary key entries are managed separately
+            return False
 
-        with self._col_locks[column]:
+        with self.col_locks[column]:
             index = self.indices[column]
             if index is None:
                 return False
@@ -112,10 +113,10 @@ class Index:
 
             index[key].remove(RID)
             if not index[key]:
-                del index[key]  #clean up empty lists
+                del index[key] #if there is nothing left in index[key], delete
             return True
 
-    #remove entire key from the index
+    #not really necessayr
     def remove_key(self, column, key):
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
@@ -132,27 +133,24 @@ class Index:
             index.pop(key)
             return True
 
-    #move RID to new value in index
-    #lock is needed to prevent other threads from viewing half-updated index
     def update_entry(self, column, old_value, new_value, RID):
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
 
         if column == self.table.key:
-            return False  # primary key is immutable
+            return False
 
         with self.col_locks[column]:
             index = self.indices[column]
             if index is None:
                 return False
 
-            #remove from old bucket
+            #essentially remove entry then insert entry
             if index.get(old_value) is not None:
                 index[old_value].remove(RID)
                 if not index[old_value]:
                     del index[old_value]
 
-            #insert into new bucket
             if index.get(new_value) is not None:
                 if RID not in index[new_value]:
                     index[new_value].append(RID)
