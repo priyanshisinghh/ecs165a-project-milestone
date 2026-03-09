@@ -22,32 +22,32 @@ class Transaction:
     def add_query(self, query, table, *args):
         self.queries.append((query, table, args))
 
-def run(self):
-    #collect all query objects that need lock manager
-    unlocked_queries = []
-    for query, table, args in self.queries:
-        query_obj = query.__self__
-        if query_obj not in unlocked_queries:
-            query_obj.lock_manager = self.lock_manager
-            unlocked_queries.append(query_obj)
-
-    #run queries
-    try:
+    def run(self):
+        #collect all query objects that need lock manager
+        unlocked_queries = []
         for query, table, args in self.queries:
-            pre_snapshot = self.capture_pre_snapshot(query, table, args)
-            result = query(*args, tid = self.tid)
-            if result is False:
-                return self.abort()
-            self.record_undo(query, table, args, pre_snapshot)
-        return self.commit()
+            query_obj = query.__self__
+            if query_obj not in unlocked_queries:
+                query_obj.lock_manager = self.lock_manager
+                unlocked_queries.append(query_obj)
+
+        #run queries
+        try:
+            for query, table, args in self.queries:
+                pre_snapshot = self.capture_pre_snapshot(query, table, args)
+                result = query(*args, tid = self.tid)
+                if result is False:
+                    return self.abort()
+                self.record_undo(query, table, args, pre_snapshot)
+            return self.commit()
         
-    except Exception:
-        return self.abort()
+        except Exception:
+            return self.abort()
         
-    finally:
-        #resent lock manager
-        for query_obj in unlocked_queries:
-            query_obj.lock_manager = None
+        finally:
+            #resent lock manager
+            for query_obj in unlocked_queries:
+                query_obj.lock_manager = None
             
     def commit(self):
         if self.lock_manager:
