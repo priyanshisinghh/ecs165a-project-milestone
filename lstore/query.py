@@ -9,7 +9,8 @@ SCHEMA_ENCODING_COLUMN = 3
 class Query:
     def __init__(self, table):
         self.table = table
-        self.lock_manager = None   #injected into queries by TransactionWorker
+        self.lock_manager = None
+        self.query_lock = threading.Lock()  # protects lock_manager injection
 
     #get lock
     def get_shared_lock(self, rid, tid):
