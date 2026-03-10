@@ -14,6 +14,8 @@ class Query:
     """
     def __init__(self, table):
         self.table = table
+        self.lock_manager = None
+        self.query_lock = threading.Lock()  #protects lock_manager injection
 
     """
     reads the latest version of a certain RID
