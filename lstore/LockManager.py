@@ -3,7 +3,7 @@ import threading
 
 class LockManager:
     def __init__(self):
-        # rid -> {'shared': set(), 'exclusive': tid | None}
+        #layout - rid -> {'shared': set(), 'exclusive': tid | None}
         self.locks = {}
         self.lock = threading.Lock()
 
@@ -13,7 +13,7 @@ class LockManager:
             self.locks[rid] = {'shared': set(), 'exclusive': None}
         return self.locks[rid]
 
-    #only granted is no transaction holds an exclusive lock
+    #only granted if no transaction holds an exclusive lock
     def acquire_shared(self, rid, tid):
         with self.lock:
             entry = self.entry(rid)
@@ -35,10 +35,9 @@ class LockManager:
             if exclusive is not None and exclusive != tid:
                 return False       
             entry['exclusive'] = tid
-            entry['shared'].discard(tid)   #in case of upgrade
+            entry['shared'].discard(tid) #in case the tid is upgrading the lock
             return True
 
-    
     def release_all(self, tid):
         with self.lock:
             for entry in self.locks.values():
@@ -47,7 +46,7 @@ class LockManager:
                     entry['exclusive'] = None
                     
             #remove entries with no active locks 
-            empty = [rid for rid, e in self.locks.items()
+            unlocked_entries = [rid for rid, e in self.locks.items()
                      if not e['shared'] and e['exclusive'] is None]
-            for rid in empty:
+            for rid in unlocked_entries:
                 del self.locks[rid]
