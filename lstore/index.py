@@ -12,7 +12,7 @@ class Index:
         self.indices = [None] * self.columns
         self.table = table
         
-        #one lock per column, always exists regardless of whether
+        #one lock per column, always exists regardless of whether the column exists or not
         self.col_locks = [threading.RLock() for _ in range(self.columns)]
 
         #guards create_index / drop_index 
@@ -20,6 +20,7 @@ class Index:
 
         self.create_index(self.table.key)
 
+    #look for one value
     def locate(self, column, value):
         #range check
         if column >= self.columns or column < 0:
@@ -32,6 +33,7 @@ class Index:
                 return []
             return list(index.get(value, []))
 
+    #locate a range of values
     def locate_range(self, column, begin, end):
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
@@ -50,6 +52,7 @@ class Index:
                 RIDs.extend(index.get(k, []))
             return RIDs
 
+    #create an index for a column
     def create_index(self, column):
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
@@ -60,6 +63,7 @@ class Index:
             self.indices[column] = SortedDict()
         return True
 
+    #delete an index for a column
     def drop_index(self, column):
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
@@ -73,6 +77,7 @@ class Index:
             self.indices[column] = None
         return True
 
+    #insert rid into index
     def insert_entry(self, column, key, RID):
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
@@ -84,19 +89,20 @@ class Index:
 
             if column == self.table.key:
                 if index.get(key) is not None:
-                    return False #do not want to insert data w/ already existing key
+                    return False #do not want to insert data w/ already existing primary key
                 index[key] = [RID]
                 return True
 
             if index.get(key) is not None:
                 if RID not in index[key]:
-                    index[key].append(RID) #no duplicate RIDs
+                    index[key].append(RID) #no duplicate RIDs for the same key
                 else:
                     return False
             else:
                 index[key] = [RID] #create new pair in index if it doesn't already exist
             return True
 
+    #remove rid from index
     def remove_entry(self, column, key, RID):
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
@@ -113,7 +119,7 @@ class Index:
 
             index[key].remove(RID)
             if not index[key]:
-                del index[key] #if there is nothing left in index[key], delete
+                del index[key] #if there is nothing left in index[key], delete it
             return True
 
     #not really necessayr
@@ -133,6 +139,7 @@ class Index:
             index.pop(key)
             return True
 
+    #update index 
     def update_entry(self, column, old_value, new_value, RID):
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
