@@ -15,7 +15,7 @@ class Frame:
         self.last_used = last_used
 
 
-# fixed size bufferpool with pin/unpin, dirty tracking, LRU eviction, and disk read/write
+#fixed size bufferpool with pin/unpin, dirty tracking, LRU eviction, and disk read/write
 class Bufferpool:
     def __init__(self, capacity_pages, disk_manager):
         self.capacity = capacity_pages
@@ -23,7 +23,7 @@ class Bufferpool:
         self.frames = {}
         self.clock = 0
         self.dirty_clock = 0
-        self._lock=threading.RLock()
+        self.lock = threading.RLock()
 
     def tick(self, frame):
         self.clock += 1
@@ -34,6 +34,7 @@ class Bufferpool:
         return self.dirty_clock
 
     #scan backwards to find where written data ends so ptr is correct after loading from disk
+    #unneeded, moved functionality to get_page
     '''
     def find_ptr(self, page):
         ptr = PAGE_SIZE
@@ -47,10 +48,10 @@ class Bufferpool:
 
     #pins and returns page, must be used with unpin
     def get_page(self, page_id):
-        with self._lock:
+        with self.lock:
             frame = self.frames.get(page_id)
 
-            #already in bufferpool - no need to do anything else
+            #already in bufferpool, no need to do anything else
             if frame is not None:
                 frame.pin_count += 1
                 self.tick(frame)
@@ -59,33 +60,36 @@ class Bufferpool:
             if len(self.frames) >= self.capacity:
                 self.evict_one()
 
-            #read raw bytes from disk and reconstruct a Page object
+            #read raw bytes from disk and reconstruct a Page object 
             page_data = self.disk.read_page(page_id)
             if page_data is None:
                 page = Page()
             else:
                 page = Page()
                 page.data = bytearray(page_data)
-                page.num_records = int.from_bytes(page.data[DATA_SIZE: DATA_SIZE + VALUE_SIZE], byteorder='big', signed=False)
+                page.num_records = int.from_bytes(page.data[DATA_SIZE: DATA_SIZE + VALUE_SIZE], byteorder = 'big', signed = False)
                 page.ptr = page.num_records * VALUE_SIZE
                 #page.ptr = self.find_ptr(page)
                 #page.num_records = page.ptr // VALUE_SIZE
 
+            #create the frame and add it to the bufferpool
             frame = Frame(page = page, dirty = False, dirty_seq = 0, pin_count = 1, last_used = 0)
             self.tick(frame)
             self.frames[page_id] = frame
             return page
 
+    #mark a page dirty
     def mark_dirty(self, page_id):
-        with self._lock:
+        with self.lock:
             frame = self.frames.get(page_id)
             if frame is None:
                 return
             frame.dirty = True
             frame.dirty_seq = self.next_dirty_seq()
 
+    #unpin a page 
     def unpin(self, page_id):
-        with self._lock:
+        with self.lock:
             frame = self.frames.get(page_id)
             if frame is None:
                 raise KeyError(f"unpin called for non-cached page_id = {page_id}")
@@ -101,14 +105,15 @@ class Bufferpool:
                 return
             if max_dirty_seq is not None and frame.dirty_seq > max_dirty_seq:
                 return
-                
-            snap_page = frame.page
-            snap_seq = frame.dirty_seq
-            self.disk.write_page(page_id, bytes(snap_page.data))
+
+            #get a snapshot of the page before writing to check if it's dirty
+            snapshot_page = frame.page
+            snapshot_seq = frame.dirty_seq
+            self.disk.write_page(page_id, bytes(snapshot_page.data))
             frame = self.frames.get(page_id)
             if frame is None:
                 return
-            if frame.dirty and frame.dirty_seq == snap_seq:
+            if frame.dirty and frame.dirty_seq == snapshot_seq:
                 frame.dirty = False
                 return
 
@@ -126,6 +131,8 @@ class Bufferpool:
     def evict_one(self):
         eviction_id = None
         eviction_last_used = None
+        
+        #choosing a page to evict - cannot evict a pinned page or a recently used page
         for pid, frame in self.frames.items():
             if frame.pin_count != 0:
                 continue
