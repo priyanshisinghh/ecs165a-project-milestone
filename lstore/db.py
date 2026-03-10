@@ -39,6 +39,7 @@ class Database:
         with Database.registry_lock:
             Database.registry[path] = self.lock_manager
 
+        #load tables
         meta_path = os.path.join(path, 'db_meta.json')
         if os.path.exists(meta_path):
             with open(meta_path, 'r') as f:
@@ -72,6 +73,7 @@ class Database:
         with open(os.path.join(self.db_path, 'db_meta.json'), 'w') as f:
             json.dump(meta, f)
 
+    #create a table
     def create_table(self, name, num_columns, key_index):
         #pass disk manager into Table so bufferpool can write to disk
         if self.disk is not None:
@@ -85,6 +87,7 @@ class Database:
             self.table_count += 1
         return table
 
+    #delete a table
     def drop_table(self, name):
         with self.tables_lock:
             if name not in self.tables:
@@ -94,6 +97,7 @@ class Database:
             del self.tables[name]
             self.table_count -= 1
 
+    #get a table w specified name
     def get_table(self, name):
         with self.tables_lock:
             return self.tables.get(name, None)
