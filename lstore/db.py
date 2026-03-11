@@ -35,7 +35,7 @@ class Database:
         self.disk = DiskManager(path)
         os.makedirs(path, exist_ok = True)
 
-        #register this database's lock_manager so transaction worker can find it
+        #db's lock_manager so transaction worker can find it
         with Database.registry_lock:
             Database.registry[path] = self.lock_manager
 
@@ -87,7 +87,6 @@ class Database:
             self.table_count += 1
         return table
 
-    #delete a table
     def drop_table(self, name):
         with self.tables_lock:
             if name not in self.tables:
@@ -96,8 +95,7 @@ class Database:
                 self.disk.delete_table(name)
             del self.tables[name]
             self.table_count -= 1
-
-    #get a table w specified name
+            
     def get_table(self, name):
         with self.tables_lock:
             return self.tables.get(name, None)
