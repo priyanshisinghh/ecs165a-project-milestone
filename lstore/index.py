@@ -122,7 +122,7 @@ class Index:
                 del index[key] #if there is nothing left in index[key], delete it
             return True
 
-    #not really necessayr
+    #not really necessayr - kept anyways
     def remove_key(self, column, key):
         if column >= self.columns or column < 0:
             raise ValueError("Column Out Of Bounds")
