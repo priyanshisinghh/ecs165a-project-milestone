@@ -27,8 +27,7 @@ class Page:
     def has_capacity(self):
         return (VALUE_SIZE + self.ptr) <= DATA_SIZE
 
-    #write to page
-    #same fiunctionality, but the lock is needed the whole time
+    #write to page - lock is needed the whole time
     def write(self, value):
         with self.write_lock:
             if not self.has_capacity():
