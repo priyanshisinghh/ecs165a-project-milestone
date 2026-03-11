@@ -34,10 +34,10 @@ class Table:
         #methods that hold it can call other methods that also acquire it
         self.dir_lock = threading.RLock()
 
-        #Guards rid_counter and tail_rid_counter
+        #guards rid_counter and tail_rid_counter
         self.rid_lock = threading.Lock()
 
-        #Serializes the duplicate-key check + page_directory/index write in insert()
+        #serializes the duplicate-key check + page_directory/index write in insert()
         self.insert_lock = threading.Lock()
         self.add_page_range()
 
@@ -145,7 +145,7 @@ class Table:
 
         base_rid = rids[0]
 
-        #read under dir_lock so we don't race with a concurrent delete or another update on same record.
+        #read under dir_lock so we don't race with a concurrent delete or another update on same record
         with self.dir_lock:
             if base_rid not in self.page_directory:
                 return False
@@ -242,7 +242,7 @@ class Table:
             pr = self.page_ranges[base_loc['page_range']]
             tps = pr.get_tps(base_loc['page_index'])
 
-            #tps == 0 means no merge has happened yet
+            #tps == 0 -> means no merge has happened yet
             already_merged = (tps != 0) and (indirection != 0) and (indirection >= tps)
 
             values = [None] * self.num_columns
