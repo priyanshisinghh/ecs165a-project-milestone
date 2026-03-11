@@ -2,7 +2,6 @@ from typing import Dict, Tuple
 from lstore.page import Page, PAGE_SIZE, VALUE_SIZE, DATA_SIZE
 import threading
 
-#page_id: (table_name, page_range_id, "base"/"tail", col_index, page_index)
 PageId = Tuple[str, int, str, int, int]
 
 
@@ -78,7 +77,6 @@ class Bufferpool:
             self.frames[page_id] = frame
             return page
 
-    #mark a page dirty
     def mark_dirty(self, page_id):
         with self.lock:
             frame = self.frames.get(page_id)
@@ -87,7 +85,6 @@ class Bufferpool:
             frame.dirty = True
             frame.dirty_seq = self.next_dirty_seq()
 
-    #unpin a page 
     def unpin(self, page_id):
         with self.lock:
             frame = self.frames.get(page_id)
