@@ -19,11 +19,10 @@ class DiskManager:
         self.db_path = db_path
         os.makedirs(db_path, exist_ok = True)
         
-        #layout of tps_cache: table_name -> { page_id_string -> tps_value }
+        #tps_cache: table_name->(page_id_string->tps_value)
         self.tps_cache = {}
 
-    #page_id is a 5-tuple: (table_name, page_range_id, page_type, col_index, page_index)
-    #gets/creates a path
+    #page_id tupled
     def get_path(self, page_id, create_dirs = False):
         table_name, page_range_id, page_type, col_index, page_index = page_id
         range_dir = os.path.join(self.db_path, table_name, f"range_{page_range_id}")
@@ -31,7 +30,7 @@ class DiskManager:
             os.makedirs(range_dir, exist_ok = True)
         return os.path.join(range_dir, f"{page_type}_col_{col_index}_page_{page_index}.dat")
 
-    #read a page's bytes
+    #read page's bytes
     def read_page(self, page_id):
         path = self.get_path(page_id)
         if not os.path.exists(path):
@@ -48,7 +47,6 @@ class DiskManager:
         with open(path, 'wb') as f:
             f.write(page_data)
 
-    #delete a table from disk
     def delete_table(self, table_name):
         import shutil
         table_dir = os.path.join(self.db_path, table_name)
@@ -59,7 +57,6 @@ class DiskManager:
             os.remove(tps_path)
         self.tps_cache.pop(table_name, None)
 
-    #check if table exists
     def table_exists(self, table_name):
         return os.path.exists(os.path.join(self.db_path, table_name))
 
@@ -67,7 +64,6 @@ class DiskManager:
     def tps_path(self, table_name):
         return os.path.join(self.db_path, f"{table_name}_tps.json")
 
-    #load tps from disk
     def load_tps(self, table_name):
         if table_name in self.tps_cache:
             return
@@ -79,19 +75,16 @@ class DiskManager:
         else:
             self.tps_cache[table_name] = {}
 
-    #save tps to disk
     def save_tps(self, table_name):
         path = self.tps_path(table_name)
         with open(path, 'w') as f:
             json.dump(self.tps_cache[table_name], f)
 
-    #read a table's tps
     def read_tps(self, page_id):
         table_name = page_id[0]
         self.load_tps(table_name)
         return self.tps_cache[table_name].get(str(page_id), None)
 
-    #write tps
     def write_tps(self, page_id, tps_value):
         table_name = page_id[0]
         self.load_tps(table_name)
